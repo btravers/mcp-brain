@@ -22,7 +22,7 @@ revision checks as the note tools.
 All memory data and previous versions live in Markdown, so copying the notes to
 another machine or connecting another provider preserves the memory. There is
 no provider-specific store to migrate. The local state directory is used for
-review plans, locks, and reminders; it is not the memory database.
+review plans, policy, reminders, recovery, and a rebuildable index; Markdown remains the source of truth.
 
 Recall selects current content and keeps old versions out of its search corpus.
 Global and project scopes reduce irrelevant context; they are not access-control
@@ -92,6 +92,57 @@ Multi-file writes use a recovery journal and are not fully atomic. They do not
 automatically undo completed writes after a later failure, because a rollback
 could overwrite new human work. See the [recovery guide](inbox.md#recover-from-an-interrupted-write).
 
+## Git synchronization and exact commits
+
+A single coordinator serializes cooperative writes, watching, and synchronization.
+Git vaults keep its lock in their Git metadata; plain folders keep it in local
+state. All processes must still share the same state directory. An alternate
+state path cannot bypass the Git lock but would hide pending journals and policy.
+
+Strict mode backs up existing human work before changing notes. Offline mode
+skips that initial push requirement, preserves local commits, and reports pending
+uploads. A completed local commit and a successful remote backup are separate
+states. A push failure does not imply the edit should be repeated.
+
+AI commits build a temporary index from HEAD and write the planned text as Git
+blobs. Later editor saves remain in the worktree. Independently staged content
+is retained in the real index. Updating HEAD uses the expected old commit, and
+an index lock excludes normal Git staging during this step. This avoids reading
+new human text into an AI commit. It bypasses commit hooks and automatic signing;
+human checkpoints still use ordinary Git commit. Custom clean filters on note
+paths are unsupported. A crash between the HEAD and index updates can leave
+staged differences requiring inspection; it does not roll back working files.
+
+Sync fetches and fast-forwards a clean tree only. Remote revisions are trusted
+Git content from the owner's configured upstream, not AI-authored rewrites.
+Reading does not implicitly synchronize. Optional startup/interval sync and the
+foreground watcher require local configuration. No external Git automation can
+be made cooperative merely by installing this server.
+
+## Retrieval and review
+
+The local index stores word postings, metadata, and parsed memories. Every query
+hashes the current Markdown files; only changed records are reparsed. Thus search
+avoids repeatedly parsing and searching all text, but still reads the vault to
+notice external edits. The index is rebuildable and contains private information.
+It is neither an embedding store nor a database service. Unicode lowercase word
+matching has no stemming, language model, or semantic truth assessment.
+
+Recall limits the serialized `memories` array by characters, not model tokens.
+An oversized record becomes an explicit reference instead of a silently cut
+statement; pagination still advances. Metadata outside that array and the MCP
+protocol representation are not included in the budget. Reference search can
+match historical text, while recall indexes current memory statements only.
+
+Optional source snapshots record vault-relative paths and content hashes in the
+memory's frontmatter, so changed-source review works after copying the Markdown
+to another machine. A moved source becomes unavailable until a reviewed update
+points to its new path. Review also flags overdue records and lexical overlaps
+or same-title candidates in overlapping scopes. These are proposals, not proof
+of contradiction; compatible statements can share words. Review does not edit
+notes. The user and assistant decide whether to update, postpone review, or
+archive, with the reason retained by the existing memory tools.
+
 ## PARA is context, not automatic judgment
 
 The server exposes the six known folders and the meaning of each category.
@@ -130,7 +181,7 @@ verify whether that remote is private or appropriate for the stored material.
 Verify it before enabling writes. It does not mirror notes to the mcp-brain
 project repository or change repository visibility.
 
-Plans, recovery journals, and tool transcripts may contain note contents. Keep
+Plans, recovery journals, search indexes, and tool transcripts may contain note contents. Keep
 the state directory and client logs private. There is no semantic detector that
 can reliably tell personal data, client material, or secrets from ordinary prose.
 The server supplies guidance, but deciding what may be retained remains a human

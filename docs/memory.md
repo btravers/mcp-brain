@@ -77,6 +77,48 @@ Recall flags it as due on and after that UTC date. The assistant should verify
 it before relying on it. This is separate from an Inbox review reminder and
 does not schedule a notification.
 
+## Review memory and its sources
+
+Ask the assistant to call `memory_review`, or inspect suggestions locally:
+
+```sh
+mcp-brain --vault /absolute/path/to/vault memory-review --limit 20
+```
+
+Review flags overdue records, changed or unavailable tracked sources, and
+possible overlaps or conflicts. A shared title or similar wording is not proof
+of contradiction. Read both records, decide with the assistant, then use
+`update_memory` or `archive_memory` with a reason. To keep a verified statement,
+update it with the same content, a review reason, and a future `review_after`.
+The history records that decision; no automatic merge or retirement occurs.
+
+To detect source changes, pass `source_notes` when remembering a statement:
+
+```json
+{
+  "title": "Example project testing convention",
+  "content": "Run the project test suite before submitting a change.",
+  "memory_type": "procedure",
+  "scope": "project:example-app",
+  "source": "[[3 Resources/Example conventions]]",
+  "source_notes": ["3 Resources/Example conventions.md"],
+  "basis": "observed"
+}
+```
+
+The example source must already exist. Its exact revision is recorded in the
+memory's frontmatter. After it changes, review the new text before updating the
+memory and passing `source_notes` again. Omission retains old snapshots; an empty
+array clears them. Renaming a source requires updating its recorded path after
+review. Source text is not automatically copied into the memory.
+
+For smaller recall responses, supply `max_chars`, for example
+`{"scope":"project:example-app","max_chars":8000}`. This bounds serialized memory
+results by characters rather than tokens. A record larger than the budget
+returns an explicit reference and revision; use `read_note` to inspect it before
+relying on it. Follow `next_offset` for the remaining records. Metadata and
+warnings outside the result array are not included in this budget.
+
 ## Correct a memory
 
 Ask:

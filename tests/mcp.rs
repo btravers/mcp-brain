@@ -16,7 +16,7 @@ async fn stdio_client_discovers_tools_reads_captures_and_observes_rejections() -
         command.arg("--vault").arg(&root).arg("--state-dir").arg(&state).arg("serve");
         let client=().serve(TokioChildProcess::new(command)?).await?;
         let tools=client.list_all_tools().await?;
-        assert_eq!(tools.len(),14);
+        assert_eq!(tools.len(),18);
         assert!(!tools.iter().any(|t|t.name.contains("apply")||t.name.contains("delete")||t.name.contains("configure")));
         assert!(tools.iter().any(|t|t.name=="read_note" && t.annotations.as_ref().unwrap().read_only_hint==Some(true)));
         let context=client.call_tool(CallToolRequestParams::new("vault_context")).await?;
@@ -31,6 +31,14 @@ async fn stdio_client_discovers_tools_reads_captures_and_observes_rejections() -
         assert!(std::fs::read_to_string(root.join("0 Inbox/Human.md"))?.starts_with(original));
         let capture=client.call_tool(CallToolRequestParams::new("create_note").with_arguments(json!({"filename":"Memory.md","title":"Memory","body":"An invented memory."}).as_object().unwrap().clone())).await?;
         assert_ne!(capture.is_error,Some(true),"{capture:?}");
+        let search=client.call_tool(CallToolRequestParams::new("search_notes").with_arguments(json!({"query":"invented"}).as_object().unwrap().clone())).await?;
+        assert_eq!(search.structured_content.as_ref().unwrap()["total"],1);
+        let sync=client.call_tool(CallToolRequestParams::new("sync_status")).await?;
+        assert_eq!(sync.structured_content.as_ref().unwrap()["git"]["enabled"],false);
+        let review=client.call_tool(CallToolRequestParams::new("memory_review").with_arguments(serde_json::Map::new())).await?;
+        assert_eq!(review.structured_content.as_ref().unwrap()["total"],0);
+        let sync=client.call_tool(CallToolRequestParams::new("sync_vault")).await?;
+        assert_eq!(sync.is_error,Some(true));
         let invalid=client.call_tool(CallToolRequestParams::new("create_note").with_arguments(json!({"filename":"Other.md","title":"Other","body":"Body","author":"human"}).as_object().unwrap().clone())).await;
         assert!(invalid.is_err()||invalid.as_ref().is_ok_and(|r|r.is_error==Some(true)));
         client.cancel().await?;
@@ -58,7 +66,7 @@ async fn legacy_initialize_and_json_lines_work_without_stdout_noise() -> Result<
         stdin.write_all(b"{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}\n").await?;
         stdin.write_all(b"{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}\n").await?;
         let response:serde_json::Value=serde_json::from_str(&lines.next_line().await?.unwrap())?;
-        assert_eq!(response["result"]["tools"].as_array().unwrap().len(),14);
+        assert_eq!(response["result"]["tools"].as_array().unwrap().len(),18);
         child.kill().await?;
         Ok::<_,anyhow::Error>(())
     }).await??;

@@ -23,6 +23,7 @@ fn remember(content: &str, scope: Option<&str>) -> Remember {
         source: "The user stated this in an invented test conversation.".into(),
         basis: Basis::UserStated,
         review_after: None,
+        source_notes: None,
     }
 }
 fn recall(query: Option<&str>, scope: Option<&str>, archived: bool) -> Recall {
@@ -33,6 +34,7 @@ fn recall(query: Option<&str>, scope: Option<&str>, archived: bool) -> Recall {
         include_archived: archived,
         offset: None,
         limit: None,
+        max_chars: None,
     }
 }
 fn update(memory: &Value, content: &str) -> UpdateMemory {
@@ -44,6 +46,7 @@ fn update(memory: &Value, content: &str) -> UpdateMemory {
         basis: Basis::UserStated,
         reason: "The preference changed.".into(),
         review_after: None,
+        source_notes: None,
         reactivate: false,
     }
 }

@@ -33,6 +33,58 @@ enum Command {
     Serve,
     /// Show PARA counts, vault instructions, and Inbox status.
     Status,
+    /// Create missing PARA directories and print portable client configuration examples.
+    Init,
+    /// Check local setup without contacting a remote or changing notes.
+    Doctor,
+    /// Fetch and fast-forward a clean Git vault, then push local commits.
+    Sync,
+    /// Show synchronization freshness, policy, and pending work.
+    SyncStatus,
+    /// Opt-in foreground checkpointing of human saves. Stop with Ctrl-C.
+    Watch {
+        #[arg(long, default_value_t = 10)]
+        debounce_seconds: u64,
+        /// Checkpoint and push once; do not start a background loop.
+        #[arg(long)]
+        once: bool,
+    },
+    /// Local-only policy. Omitted settings retain their existing values.
+    Config {
+        #[arg(long, action = clap::ArgAction::Set)]
+        offline_writes: Option<bool>,
+        #[arg(long, action = clap::ArgAction::Set)]
+        sync_on_start: Option<bool>,
+        /// Minimum 30 seconds; 0 disables periodic sync.
+        #[arg(long)]
+        sync_interval_seconds: Option<u64>,
+    },
+    Recover {
+        #[command(subcommand)]
+        command: RecoveryCommand,
+    },
+    /// Rebuild the private local full-text index from Markdown.
+    Index {
+        #[command(subcommand)]
+        command: IndexCommand,
+    },
+    /// Search words in note paths and full content, ranked by distinct matches.
+    Search {
+        query: String,
+        #[arg(long)]
+        category: Option<String>,
+        #[arg(long, default_value_t = 0)]
+        offset: usize,
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+    },
+    /// Review overdue memories, changed sources, and lexical conflict candidates.
+    MemoryReview {
+        #[arg(long, default_value_t = 0)]
+        offset: usize,
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+    },
     /// Review captures and locally approve proposed moves.
     Inbox {
         #[command(subcommand)]
@@ -43,6 +95,34 @@ enum Command {
         #[command(subcommand)]
         command: ReminderCommand,
     },
+}
+
+#[derive(Subcommand)]
+enum IndexCommand {
+    Rebuild,
+}
+
+#[derive(Subcommand)]
+enum RecoveryCommand {
+    /// Retry only the pending upload; never repeat a note mutation.
+    Push,
+    /// Display exact before/after text from a local transaction journal.
+    Show { journal: String },
+    /// Resume an interrupted transaction after interactive approval.
+    Finish { journal: String },
+}
+
+fn approve(id: &str) -> Result<()> {
+    ensure!(
+        io::stdin().is_terminal(),
+        "approval requires an interactive terminal"
+    );
+    print!("\nApply these exact changes? Type {id} to confirm: ");
+    io::stdout().flush()?;
+    let mut answer = String::new();
+    io::stdin().read_line(&mut answer)?;
+    ensure!(answer.trim() == id, "cancelled; no notes changed");
+    Ok(())
 }
 
 #[derive(Subcommand)]
@@ -88,12 +168,113 @@ enum ReminderCommand {
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
+    if matches!(cli.command, Command::Init) {
+        std::fs::create_dir_all(&cli.vault)?;
+    }
     let vault = Vault::open(cli.vault, cli.state_dir)?;
     match cli.command {
         Command::Serve => {
+            let policy = vault.policy()?;
+            if policy.sync_on_start {
+                let v = vault.clone();
+                if let Err(e) = tokio::task::spawn_blocking(move || v.synchronize()).await? {
+                    eprintln!("startup sync: {e:#}");
+                }
+            }
+            let background = policy.sync_interval_seconds.map(|seconds| {
+                let v = vault.clone();
+                tokio::spawn(async move {
+                    loop {
+                        tokio::time::sleep(std::time::Duration::from_secs(seconds.max(30))).await;
+                        let v = v.clone();
+                        match tokio::task::spawn_blocking(move || v.synchronize()).await {
+                            Ok(Ok(_)) => {}
+                            Ok(Err(e)) => eprintln!("periodic sync: {e:#}"),
+                            Err(e) => eprintln!("periodic sync: {e}"),
+                        }
+                    }
+                })
+            });
             Brain::new(vault).serve(stdio()).await?.waiting().await?;
+            if let Some(task) = background {
+                task.abort();
+            }
         }
         Command::Status => println!("{}", pretty(&vault.context()?)?),
+        Command::Init => println!("{}", pretty(&vault.initialize()?)?),
+        Command::Doctor => {
+            let result = vault.doctor()?;
+            println!("{}", pretty(&result)?);
+            if result["ok"] != true {
+                std::process::exit(1);
+            }
+        }
+        Command::Sync => println!("{}", pretty(&vault.synchronize()?)?),
+        Command::SyncStatus => println!("{}", pretty(&vault.sync_status()?)?),
+        Command::Watch {
+            debounce_seconds,
+            once,
+        } => {
+            if once {
+                println!("{}", pretty(&vault.watch_once()?)?);
+            } else {
+                vault.watch(debounce_seconds)?;
+            }
+        }
+        Command::Config {
+            offline_writes,
+            sync_on_start,
+            sync_interval_seconds,
+        } => {
+            let mut policy = vault.policy()?;
+            if let Some(v) = offline_writes {
+                policy.offline_writes = v;
+            }
+            if let Some(v) = sync_on_start {
+                policy.sync_on_start = v;
+            }
+            if let Some(v) = sync_interval_seconds {
+                policy.sync_interval_seconds = (v != 0).then_some(v);
+            }
+            if offline_writes.is_some()
+                || sync_on_start.is_some()
+                || sync_interval_seconds.is_some()
+            {
+                println!("{}", pretty(&vault.configure(policy)?)?);
+            } else {
+                println!("{}", pretty(&policy)?);
+            }
+        }
+        Command::Recover { command } => match command {
+            RecoveryCommand::Push => println!("{}", pretty(&vault.retry_push()?)?),
+            RecoveryCommand::Show { journal } => {
+                println!("{}", pretty(&vault.recovery_show(&journal)?)?)
+            }
+            RecoveryCommand::Finish { journal } => {
+                ensure!(
+                    io::stdin().is_terminal(),
+                    "recovery approval requires an interactive terminal"
+                );
+                println!("{}", pretty(&vault.recovery_show(&journal)?)?);
+                approve(&journal)?;
+                println!("{}", pretty(&vault.recovery_finish(&journal)?)?);
+            }
+        },
+        Command::Index {
+            command: IndexCommand::Rebuild,
+        } => println!("{}", pretty(&vault.rebuild_index()?)?),
+        Command::Search {
+            query,
+            category,
+            offset,
+            limit,
+        } => println!(
+            "{}",
+            pretty(&vault.search_notes(&query, category.as_deref(), offset, limit)?)?
+        ),
+        Command::MemoryReview { offset, limit } => {
+            println!("{}", pretty(&vault.memory_review(offset, limit)?)?)
+        }
         Command::Inbox { command } => match command {
             InboxCommand::Status => println!("{}", pretty(&vault.inbox_status()?)?),
             InboxCommand::Review { offset, limit } => {

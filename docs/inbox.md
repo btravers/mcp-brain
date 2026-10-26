@@ -146,22 +146,46 @@ destinations using temporary files, then removes moved sources. Individual
 replacements are atomic; the complete multi-file operation is not a filesystem
 transaction. The journal contains the originals and intended results.
 
-If the initial Git checkpoint or push fails, no note changes are made. If a
-later commit or push fails, the result reports that notes were saved and gives
-a warning. **Do not repeat the edit.** Reads remain available, and further note
-writes are blocked while a transaction journal exists.
+Under the default strict policy, a failed initial checkpoint or push prevents
+note changes. If a later commit or push fails, the write reports a warning.
+**Do not repeat the edit.** Inspect the current state:
 
-1. Stop other editors and mcp-brain clients for that vault.
-2. Locate the `transaction-*.json` file in the state directory reported by the
-   error. Keep a copy outside the vault; it contains private note content.
-3. Compare its `before` and `after` values with the current files. Complete the
-   intended move or restore the original content yourself. Preserve any later
-   human changes; do not blindly overwrite them.
-4. If Git is enabled, inspect `git status` and `git log`, commit any repaired
-   changes as appropriate, and push to the intended backup.
-5. Move the resolved journal outside the active state directory. Retry reads
-   and generate a new plan if one is still needed.
+```sh
+mcp-brain --vault /absolute/path/to/vault sync-status
+```
 
-There is intentionally no automatic rollback that could overwrite concurrent
-human edits. A crash or client timeout can occur after a write completes, so
-always inspect the current revision before retrying.
+A **pending push** means the note changes are already committed locally. Restore
+connectivity/authentication, then run:
+
+```sh
+mcp-brain --vault /absolute/path/to/vault recover push
+```
+
+An **unfinished transaction** means a file operation or commit needs recovery.
+Reads remain available; further note writes, watching, and sync are blocked.
+Stop other writers, retain a private copy of the journal, and inspect it:
+
+```sh
+mcp-brain --vault /absolute/path/to/vault recover show transaction-EXAMPLE.json
+mcp-brain --vault /absolute/path/to/vault recover finish transaction-EXAMPLE.json
+```
+
+Use the actual journal filename from `sync-status`. `finish` displays every
+before/after value and requires typing the filename in an interactive terminal.
+It resumes only when each current file exactly matches its recorded before or
+after state. Later edits stop recovery before any remaining file is changed.
+Newer committed versions also stop automatic commit recovery. Nothing is
+rolled back automatically. The command commits the intended snapshots, removes
+the completed journal, and attempts a push; a failed upload becomes pending.
+
+If recovery reports later edits, compare them with the journal and reconcile
+manually while preserving all human work. After verifying files, Git history,
+index, and backup, move the resolved journal outside the active state directory.
+A process failure between updating Git HEAD and replacing its index can leave
+staged differences; inspect these and preserve any independently staged human
+work before declaring recovery complete. Never blindly reset or clean a vault.
+
+An inbox plan interrupted after its writes may remain without an applied-plan
+receipt. Recover the journal first, inspect the resulting Inbox, then generate
+a new plan instead of applying the old one again. A crash or client timeout can
+occur after a successful write: always read the current revision before retrying.

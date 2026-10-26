@@ -8,7 +8,7 @@ use yaml_serde::{Mapping, Value};
 pub const AI_MARKER: &str = "<!-- ai-generated, safe to delete -->";
 pub const MAX_NOTE_BYTES: usize = 2 * 1024 * 1024;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Author {
     Human,

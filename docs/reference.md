@@ -2,7 +2,7 @@
 
 ## MCP tools
 
-The server exposes fourteen tools over stdio. Successful results include structured
+The server exposes eighteen tools over stdio. Successful results include structured
 JSON and a textual representation for clients. Operation failures use MCP tool
 errors. Invalid arguments may be returned as protocol errors by the SDK.
 
@@ -11,9 +11,9 @@ relative to the configured vault. Pagination offsets are zero-based.
 
 | Tool | Arguments | Result / behavior |
 | --- | --- | --- |
-| `remember` | `title`, `content`, `memory_type`, `source`, `basis`; optional `scope`, `review_after` | Creates a durable memory note in Inbox; returns stable ID, revision, and write outcome |
-| `recall` | Optional `query`, `scope`, `memory_type`, `include_archived`, `offset`, `limit` | Ranked current memories with provenance, review status, annotations, and warnings |
-| `update_memory` | `id`, `expected_revision`, `content`, `source`, `basis`, `reason`; optional `review_after`, `reactivate` | Updates current content, retains prior versions and human Notes |
+| `remember` | `title`, `content`, `memory_type`, `source`, `basis`; optional `scope`, `review_after`, `source_notes` | Creates a durable memory note in Inbox; returns stable ID, revision, and write outcome |
+| `recall` | Optional `query`, `scope`, `memory_type`, `include_archived`, `offset`, `limit`, `max_chars` | Ranked current memories with provenance, review status, annotations, and warnings |
+| `update_memory` | `id`, `expected_revision`, `content`, `source`, `basis`, `reason`; optional `review_after`, `reactivate`, `source_notes` | Updates current content, retains prior versions and human Notes |
 | `archive_memory` | `id`, `expected_revision`, `reason` | Excludes the record from normal recall without deleting or moving it |
 | `vault_context` | None | PARA folder counts, `AGENTS.md` content if present, ownership/privacy guidance, Inbox status |
 | `list_notes` | Optional `category`, `query`, `offset`, `limit` | Metadata, revisions, total, next offset; literal case-insensitive path/content search |
@@ -25,6 +25,10 @@ relative to the configured vault. Pagination offsets are zero-based.
 | `inbox_status` | None | Capture count, oldest modification time, reminder configuration and due status |
 | `inbox_review` | Optional `offset`, `limit` | Previews, lexical folder matches, review questions, status |
 | `propose_inbox_plan` | `moves` | Saves a local plan; returns ID, move descriptions, changed paths, expiry, approval command |
+| `sync_status` | None | Last successful sync/error, cached ahead/behind counts, local policy, pending pushes and journals; no network |
+| `sync_vault` | None | Explicit fetch, fast-forward, push; refuses dirty trees, divergence, and incomplete transactions |
+| `search_notes` | `query`; optional `category`, `offset`, `limit` | Indexed full-text word search; ranked metadata and revisions |
+| `memory_review` | Optional `offset`, `limit` | Overdue, changed/unavailable sources, lexical duplicate/conflict candidates; no note changes |
 
 `list_notes.limit` defaults to 50 and accepts 1–200. `inbox_review.limit`
 defaults to 20 and accepts 1–50. Review previews contain at most 1,200 characters;
@@ -61,6 +65,37 @@ query lists memories in scope. The response wraps each record as
 `{"score": 2, "memory": {...}}` and returns `total`, `next_offset`, and `warnings`.
 Malformed records are reported in warnings; duplicate IDs stop retrieval rather
 than silently selecting a record.
+
+`recall.max_chars` accepts 2,048–100,000, default 16,000. It budgets the serialized
+`memories` array in Unicode characters, not tokens. Other response metadata,
+warnings, and MCP's textual/structured representations are outside that budget.
+When a full record cannot fit as the first result, it becomes an explicit
+`truncated: true` reference containing ID, path, revision, and `required_chars`.
+Read that note or increase the budget. `next_offset` counts records actually
+returned, including references, so callers can continue without skipping records.
+
+`search_notes` uses a local inverted index, Unicode lowercase word tokenization,
+and OR matching. Scores count distinct matched query words; ties sort by path.
+It has no stemming or semantic search. `limit` accepts 1–100, default 20.
+Every query reads and hashes current files to notice external changes; unchanged
+records reuse cached parsing and postings. `list_notes` retains its literal
+substring behavior. `index rebuild` regenerates the cache; invalid JSON or a
+cache version mismatch triggers an automatic rebuild on the next indexed query.
+
+`source_notes` accepts up to 20 exact vault-relative Markdown paths. On capture,
+their revisions are stored as `source_snapshots` in the memory frontmatter.
+On update, omitted `source_notes` retains the snapshots; supply the reviewed
+paths to refresh them, or `[]` to remove them. Descriptive `source` remains
+required. Renamed paths are reported as unavailable until explicitly updated.
+
+`memory_review.limit` accepts 1–100, default 20. Findings include exact memory
+revisions for subsequent update/archive decisions. Identical statements are
+`duplicate_candidate`; same-title records or word-set similarity of at least
+0.8 are `possible_conflict_or_overlap`. Different project scopes are compared
+only through a global memory. This is a lexical heuristic, not proof of a
+contradiction. Pair comparisons are quadratic in the number of active memories;
+large memory collections may need a more selective strategy in a future version.
+Review itself never changes a memory or approves a proposed decision.
 
 `review_after` is an optional UTC `YYYY-MM-DD` date. Recall flags `review_due`
 on and after that date. Due memories remain visible so the assistant can ask
@@ -134,6 +169,18 @@ mcp-brain --vault PATH [--state-dir PATH] COMMAND
 
 serve
 status
+init
+doctor
+sync
+sync-status
+watch [--debounce-seconds N] [--once]
+config [--offline-writes true|false] [--sync-on-start true|false] [--sync-interval-seconds N]
+recover push
+recover show JOURNAL_FILENAME
+recover finish JOURNAL_FILENAME
+index rebuild
+search QUERY [--category CATEGORY] [--offset N] [--limit N]
+memory-review [--offset N] [--limit N]
 inbox status
 inbox review [--offset N] [--limit N]
 inbox show PLAN_ID
@@ -145,9 +192,15 @@ reminder check [--exit-code]
 reminder calendar [--time HH:MM]
 ```
 
-`--vault` is required before the command. The path must exist. `--state-dir`
+`--vault` is required before the command. The path must exist except for `init`. `--state-dir`
 is optional and must be outside the vault. `--help` and `--version` work without
 a vault. `inbox apply` requires interactive stdin and confirmation of the plan ID.
+`recover finish` similarly requires typing the displayed journal filename.
+`config` without options displays current policy; omitted options retain their
+values. Periodic sync accepts at least 30 seconds, or 0 to disable it. Watch
+debounce accepts 1–3,600 seconds, default 10. `doctor` exits 1 on detected issues;
+it does not test remote authentication or contact the network. `recover push`
+reports a remaining upload failure in its JSON `warning`; inspect that field.
 
 Most commands print JSON. `serve` reserves stdout for MCP, `reminder check`
 prints a human message only when due, and `reminder calendar` prints iCalendar
@@ -165,9 +218,11 @@ inside `mcp-brain/<vault-id>`. The ID is derived from the canonical vault path.
 Use `--state-dir` when you need an explicit location. Unix state directories
 are mode `0700`; other platforms use the user's normal local permissions.
 
-State contains an advisory lock, reminder preferences, plan files, applied-plan
-receipts, and unfinished transaction journals. Plans and journals contain note
-contents. Keep state private; do not commit it or place it in a shared folder.
+State contains local policy, sync timestamps/errors, pending upload state,
+reminder preferences, plan files, applied-plan receipts, a search index, and
+unfinished transaction journals. Git vaults put the coordinator lock in Git
+metadata; other folders use a state-directory lock. Plans, indexes, and journals
+contain private information. Keep state private; do not commit it or place it in a shared folder.
 Completed transaction journals are removed. Plans and receipts remain until
 you remove them yourself. Moving a vault changes its default state ID.
 

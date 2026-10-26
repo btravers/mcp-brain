@@ -20,18 +20,23 @@ not a filesystem sandbox. Start with the [practice vault tutorial](docs/tutorial
 - Appends or revises a marked `## AI` section in human notes.
 - Counts Inbox captures and prepares sorting proposals for local approval.
 - Offers opt-in review reminders, with due checks and calendar export.
-- Checkpoints, commits, and pushes changes when the vault is a Git repository.
+- Commits exact AI snapshots and separate human checkpoints to a configured Git backup.
+- Exposes explicit fast-forward sync, freshness, pending pushes, and recovery.
+- Optionally watches human saves and supports local commits while offline.
+- Reviews overdue memories, changed sources, and possible duplicates or conflicts.
+- Builds a private full-text index and bounds recall context by a character budget.
+- Creates PARA folders with `init` and checks setup with `doctor`.
 
 One native executable. No Python, Node.js, model API key, or database is needed
-at runtime. Git is required only for Git-backed vaults. Search is literal text
-search; your connected assistant supplies the reasoning.
+at runtime. Git is required only for Git-backed vaults. Indexed search matches
+words; literal search remains available. Your connected assistant supplies the
+reasoning.
 
 ## Install
 
 Download a platform archive and `SHA256SUMS` from
 [GitHub Releases](https://github.com/btravers/mcp-brain/releases), verify its
 checksum, extract it, and put the executable on your `PATH`.
-If no published release is available yet, build from source below.
 
 | Platform | Archive target |
 | --- | --- |
@@ -59,6 +64,10 @@ Use your own absolute executable and vault paths:
 codex mcp add brain -- /absolute/path/to/mcp-brain --vault /absolute/path/to/vault serve
 claude mcp add --transport stdio --scope user brain -- /absolute/path/to/mcp-brain --vault /absolute/path/to/vault serve
 ```
+
+For a new vault, run `mcp-brain --vault /absolute/path/to/vault init` first.
+Use `doctor` to check setup. See [sync, watching, and offline settings](docs/setup.md#synchronize-and-work-offline)
+for optional automation; reads remain local by default.
 
 Both clients launch the same executable against the same files. The server
 advertises its tools and instructions through MCP. Each client still needs its

@@ -31,6 +31,16 @@ pub struct ListNotes {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub struct SearchNotes {
+    pub query: String,
+    pub category: Option<String>,
+    pub offset: Option<usize>,
+    /// 1–100, default 20. Whole-word OR search, ranked by distinct query words.
+    pub limit: Option<usize>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct ReadNote {
     pub path: String,
 }
@@ -99,6 +109,51 @@ impl Brain {
 
 #[tool_router]
 impl Brain {
+    #[tool(
+        description = "Show Git freshness relative to last fetched refs, local sync policy, pending uploads, and unfinished transactions. Local only; does not fetch or pull.",
+        annotations(read_only_hint = true, open_world_hint = false)
+    )]
+    async fn sync_status(&self) -> CallToolResult {
+        self.run(|v| v.sync_status()).await
+    }
+
+    #[tool(
+        description = "Explicitly fetch, fast-forward, and push the configured Git upstream. Requires a clean tree and no interrupted transaction; refuses divergence, never stashes, rebases, force-pushes, or resolves conflicts. This changes files from the configured remote; read notes again afterwards.",
+        annotations(
+            read_only_hint = false,
+            destructive_hint = false,
+            open_world_hint = true
+        )
+    )]
+    async fn sync_vault(&self) -> CallToolResult {
+        self.run(|v| v.synchronize()).await
+    }
+
+    #[tool(
+        description = "Review overdue memories, changed or unavailable source notes, and lexical duplicate/conflict candidates. These are suggestions, not proven contradictions. Show findings to the user before deciding; accepted updates/archive actions retain reasons in History. Makes no note changes.",
+        annotations(read_only_hint = true, open_world_hint = false)
+    )]
+    async fn memory_review(&self, Parameters(p): Parameters<Page>) -> CallToolResult {
+        self.run(move |v| v.memory_review(p.offset.unwrap_or(0), p.limit.unwrap_or(20)))
+            .await
+    }
+
+    #[tool(
+        description = "Search the local full-text index of Markdown paths and contents with whole-word OR matching and ranked results. Hashes files on each query to detect external edits; cache is rebuildable. Includes ordinary references and memory history: use recall for current memory facts. Returns metadata; read_note retrieves full text.",
+        annotations(read_only_hint = true, open_world_hint = false)
+    )]
+    async fn search_notes(&self, Parameters(p): Parameters<SearchNotes>) -> CallToolResult {
+        self.run(move |v| {
+            v.search_notes(
+                &p.query,
+                p.category.as_deref(),
+                p.offset.unwrap_or(0),
+                p.limit.unwrap_or(20),
+            )
+        })
+        .await
+    }
+
     #[tool(
         description = "Store one durable provider-independent memory: a preference, fact, decision, or procedure. Explicitly identify source and whether it was stated, observed, or inferred. Recall first to avoid duplicates or contradictions. Creates an AI Markdown note in Inbox; never promotes human notes automatically or stores client secrets.",
         annotations(

@@ -51,7 +51,20 @@ and communicates over stdio. No listener or HTTP port is opened.
 
 ## Prepare a vault
 
-Pass an existing directory. The recognized folder names are:
+For a new vault, create the PARA folders and print client configuration examples:
+
+```sh
+mcp-brain --vault /absolute/path/to/vault init
+mcp-brain --vault /absolute/path/to/vault doctor
+```
+
+`init` can create the vault directory. It preserves existing notes, does not
+initialize Git, and does not edit client configuration files. Its JSON output
+contains a Claude-compatible configuration and a Codex table represented as
+JSON; use the TOML example below for Codex. Replace `command` with your installed
+executable's absolute path when it is not on the client's `PATH`.
+
+All other commands need an existing directory. The recognized folder names are:
 
 ```text
 0 Inbox/
@@ -82,10 +95,88 @@ Before a write it commits dirty work as `Save existing vault changes` and pushes
 It commits its own changes separately with an `ai:` prefix and pushes again.
 This includes single-note writes that also maintain an index.
 
-Git hooks and signing settings still apply. Authentication and signing must
-work without an interactive prompt in the MCP process. A failed initial backup
-prevents note changes. See [recovery](inbox.md#recover-from-an-interrupted-write)
-for failures after files have been saved.
+Human checkpoints use ordinary `git commit`, including its hooks and signing
+settings. AI commits use Git plumbing to commit the exact intended bytes;
+they bypass commit hooks and automatic signing, and do not apply clean filters.
+If Git would convert the intended bytes (for example CRLF normalization), the
+operation is rejected before changing notes. Configure Markdown attributes and
+line-ending policy yourself to avoid conversion; the server never changes them.
+Do not depend on a hook to sanitize AI content. Git push hooks still apply.
+Authentication must work without prompts; each Git subprocess has a 30-second
+deadline. A failed initial backup prevents note changes under the default policy.
+See [synchronization and offline operation](#synchronize-and-work-offline) and
+[recovery](inbox.md#recover-from-an-interrupted-write).
+
+## Synchronize and work offline
+
+Reads use local files. They never run a hidden pull. Check freshness or explicitly
+synchronize with the vault's configured upstream:
+
+```sh
+mcp-brain --vault /absolute/path/to/vault sync-status
+mcp-brain --vault /absolute/path/to/vault sync
+```
+
+`sync-status` does not access the network. Ahead/behind counts describe the last
+fetched remote refs; `last_sync.completed_at` records the last successful full
+sync, and `last_sync_error` records a later failed attempt. `sync` requires a
+clean worktree, fetches, fast-forwards when behind, and pushes the current branch
+to its configured upstream. It refuses divergence and unfinished Git operations.
+It never stashes, rebases, force-pushes, or resolves conflicts. Reconcile diverged
+branches yourself, then retry. Read notes again after a sync.
+
+Startup and periodic synchronization are opt-in local settings:
+
+```sh
+mcp-brain --vault /absolute/path/to/vault config --sync-on-start true --sync-interval-seconds 300
+```
+
+`serve` and `watch` honor these settings while running. A failed startup sync is
+reported on stderr; `serve` remains available for local reads. Periodic failures
+are also reported and visible in status. Each client process has its own timer;
+the shared coordinator serializes operations, but multiple clients can fetch
+redundantly. Set the interval to `0` and startup to `false` to disable them.
+Changes to periodic settings take effect after restarting the process.
+
+Strict backup is the default: the initial checkpoint must push before a note
+mutation. To explicitly allow local commits without an available remote:
+
+```sh
+mcp-brain --vault /absolute/path/to/vault config --offline-writes true
+```
+
+A configured upstream is still required. Writes commit locally and attempt to
+push, returning a warning if upload fails. Pending pushes do not leave a file
+recovery journal or prevent subsequent offline writes. `recover push` retries
+only upload. Turn strict mode back on with `--offline-writes false`. A remote
+that advanced while you were offline can cause divergence; resolve it manually.
+The MCP has no tool to change this policy.
+
+## Back up human saves from Obsidian
+
+Use one Git automation service for a vault. To let mcp-brain checkpoint human
+edits after ten seconds without a content change:
+
+```sh
+mcp-brain --vault /absolute/path/to/vault watch --debounce-seconds 10
+```
+
+This is a foreground process; stop it with Ctrl-C. It polls once per second,
+hashes tracked and non-ignored files, and commits human saves under
+`Save existing vault changes`, then attempts a push. It covers Markdown and
+other Git-visible vault files, respecting `.gitignore`. Unchanged files produce
+no additional commits. `watch --once` checkpoints and pushes immediately,
+without a loop. Watch itself is an explicit opt-in to committing human saves
+locally even if the subsequent upload fails.
+
+Obsidian does not need a plugin for this workflow. Disable other automatic
+commit/pull/push services, including Obsidian Git automation, before running it.
+Ordinary Git commands do not honor mcp-brain's coordinator; Git index locking
+protects the exact AI commit step, but cannot serialize every external command.
+All clients and the watcher must use the same state directory so they share
+policy, journals, and pending uploads. No daemon or OS service is installed.
+For large vaults, per-second file hashing can be costly; use `watch --once`
+through your own scheduler if that tradeoff is preferable.
 
 ## Codex
 

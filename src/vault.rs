@@ -181,7 +181,19 @@ impl Vault {
     }
 
     pub fn lock(&self) -> Result<VaultGuard> {
-        let path = self.state.join("vault.lock");
+        let path = if git::enabled(&self.root) {
+            PathBuf::from(git::git(
+                &self.root,
+                &[
+                    "rev-parse",
+                    "--path-format=absolute",
+                    "--git-path",
+                    "mcp-brain.lock",
+                ],
+            )?)
+        } else {
+            self.state.join("vault.lock")
+        };
         if let Ok(meta) = fs::symlink_metadata(&path) {
             reject_alias(&meta)?;
         }
@@ -348,7 +360,7 @@ impl Vault {
             None
         };
         Ok(
-            json!({"categories":categories, "vault_rules":rules, "git_backup":git::enabled(&self.root),
+            json!({"categories":categories, "vault_rules":rules, "git_backup":git::enabled(&self.root), "synchronization":self.sync_status()?,
             "ownership":"Human notes are immutable except a marked trailing AI section and additive up metadata. Missing author means human. AI notes retain their trailing Notes section.",
             "privacy":"Never store credentials or private client material. The server cannot determine whether arbitrary prose contains personal or confidential data.",
             "inbox":self.inbox_status()?}),
@@ -399,17 +411,7 @@ impl Vault {
     /// Validate every change before writing any file. A recovery journal keeps
     /// the originals if a filesystem or Git operation fails mid-transaction.
     pub fn apply(&self, changes: &[Change], message: &str) -> Result<Outcome> {
-        for entry in fs::read_dir(&self.state)? {
-            let entry = entry?;
-            ensure!(
-                !entry
-                    .file_name()
-                    .to_string_lossy()
-                    .starts_with("transaction-"),
-                "an unfinished transaction needs recovery first: {}. Inspect its before/after content and repair the vault and Git backup, then move the journal out of the state directory",
-                entry.path().display()
-            );
-        }
+        self.require_recovered()?;
         let changes: Vec<_> = changes.iter().filter(|c| c.before != c.after).collect();
         let mut seen = BTreeSet::new();
         for change in &changes {
@@ -436,7 +438,8 @@ impl Vault {
                 warning: None,
             });
         }
-        git::checkpoint(&self.root)?;
+        git::validate_snapshots(&self.root, &changes)?;
+        git::checkpoint(&self.root, self.policy()?.offline_writes)?;
         // Git hooks or concurrent editors can have changed files during checkpoint.
         for change in &changes {
             let path = self.note_path(&change.path)?;
@@ -453,6 +456,34 @@ impl Vault {
         }
         let journal = format!("transaction-{}.json", uuid::Uuid::new_v4());
         self.write_state(&journal, &serde_json::to_string_pretty(&changes)?)?;
+        self.write_changes(&changes, &journal)?;
+        let paths: Vec<_> = changes.iter().map(|c| c.path.clone()).collect();
+        let owned: Vec<Change> = changes.iter().map(|c| (*c).clone()).collect();
+        let warning = match git::finish(&self.root, &owned, message) {
+            Ok(()) => {
+                self.mark_pending_push()?;
+                fs::remove_file(self.state.join(&journal))?;
+                self.backup()?
+            }
+            Err(e) => Some(format!(
+                "Notes were saved but commit is incomplete: {e:#}. Do not repeat the edit; run recover show/finish {journal}."
+            )),
+        };
+        Ok(Outcome {
+            changed: paths,
+            revisions: changes
+                .iter()
+                .filter_map(|c| {
+                    c.after
+                        .as_ref()
+                        .map(|a| (c.path.clone(), note::revision(a)))
+                })
+                .collect(),
+            warning,
+        })
+    }
+
+    pub(crate) fn write_changes(&self, changes: &[&Change], journal: &str) -> Result<()> {
         // Write all destinations before removing any moved sources.
         for change in changes.iter().filter(|c| c.after.is_some()) {
             let path = self.note_path(&change.path)?;
@@ -487,24 +518,7 @@ impl Vault {
             );
             fs::remove_file(self.note_path(&change.path)?)?;
         }
-        let paths: Vec<_> = changes.iter().map(|c| c.path.clone()).collect();
-        let warning = git::finish(&self.root, &paths, message).err().map(|e|format!("Notes were saved, but Git backup is incomplete: {e:#}. Do not repeat the edit; repair Git and push. Recovery journal: {journal}"));
-        // Keep the journal until backup is known to have succeeded.
-        if warning.is_none() {
-            fs::remove_file(self.state.join(journal))?;
-        }
-        Ok(Outcome {
-            changed: paths,
-            revisions: changes
-                .iter()
-                .filter_map(|c| {
-                    c.after
-                        .as_ref()
-                        .map(|a| (c.path.clone(), note::revision(a)))
-                })
-                .collect(),
-            warning,
-        })
+        Ok(())
     }
 
     pub fn create(&self, filename: &str, title: &str, body: &str) -> Result<Outcome> {

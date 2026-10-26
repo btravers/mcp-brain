@@ -31,7 +31,9 @@ The author identity in package metadata is intentionally public.
 | `src/memory.rs` | Portable memory records, scope, provenance, history, recall, retirement |
 | `src/vault.rs` | Paths, reads/search, locking, writes, indexes, recovery journals |
 | `src/review.rs` | Inbox hints, proposed moves, reminder state |
-| `src/git.rs` | Separate human/AI checkpoints and backup pushes |
+| `src/git.rs` | Exact AI snapshots, human checkpoints, fast-forward sync, bounded Git subprocesses |
+| `src/operations.rs` | Local policy, coordinator workflows, watching, recovery, setup diagnostics |
+| `src/index.rs` | Rebuildable word postings and content-hash invalidation |
 | `src/server.rs` | Typed MCP tools and initialization instructions |
 | `src/main.rs` | Local CLI and human approval boundary |
 
