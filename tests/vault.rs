@@ -444,3 +444,14 @@ fn git_without_upstream_prevents_any_note_mutation() {
     assert!(v.create("A.md", "A", "Body").is_err());
     assert!(v.paths().unwrap().is_empty());
 }
+
+#[test]
+fn case_variant_sources_and_destination_parents_are_rejected() {
+    let (_temp, v) = fixture();
+    put(&v, "0 Inbox/Alpha.md", "Human capture");
+    put(&v, "3 Resources/Garden/Other.md", "Reference");
+    assert!(v.read_text("0 Inbox/alpha.md").is_err());
+    let plan = move_to(&v, "0 Inbox/Alpha.md", "3 Resources/garden/Alpha.md");
+    assert!(v.propose_plan(vec![plan]).is_err());
+    assert_eq!(v.read_text("0 Inbox/Alpha.md").unwrap(), "Human capture");
+}

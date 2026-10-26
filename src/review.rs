@@ -150,6 +150,10 @@ impl Vault {
         let mut folders = Vec::new();
         for item in &moves {
             ensure!(
+                snapshot.contains_key(&item.source),
+                "source must exactly match a path returned by list_notes"
+            );
+            ensure!(
                 category(&item.source) == Some("inbox") && !is_index(&item.source),
                 "source must be an Inbox note, not its index"
             );

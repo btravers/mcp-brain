@@ -200,6 +200,19 @@ impl Vault {
         valid_relative(relative)?;
         let mut path = self.root.clone();
         for part in relative.split('/') {
+            // Keep one spelling across case-sensitive and case-insensitive
+            // hosts. A second spelling must never become a second planned file.
+            if path.is_dir() {
+                for sibling in fs::read_dir(&path)? {
+                    let sibling = sibling?;
+                    let name = sibling.file_name();
+                    let name = name.to_string_lossy();
+                    ensure!(
+                        name == part || name.to_lowercase() != part.to_lowercase(),
+                        "path casing differs from an existing entry; use its exact spelling: {name}"
+                    );
+                }
+            }
             path.push(part);
             match fs::symlink_metadata(&path) {
                 Ok(meta) => reject_alias(&meta)?,
