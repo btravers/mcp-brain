@@ -1,54 +1,46 @@
 # mcp-brain
 
-Portable LLM memory shared across AI providers, stored as Markdown.
+[![CI](https://github.com/btravers/mcp-brain/actions/workflows/ci.yml/badge.svg)](https://github.com/btravers/mcp-brain/actions/workflows/ci.yml)
 
-Connect Claude Code, Codex, or another local MCP client to the same Obsidian
-vault. Remember preferences, facts, decisions, and procedures; recall them from
-another provider; and preserve human notes through ownership checks in Rust.
+**One Markdown memory for your AI assistants.**
 
-**Early release:** the ownership and workflow boundaries are tested, but this is
-not a filesystem sandbox. Start with the [practice vault tutorial](docs/tutorial.md).
+Remember a preference in Claude Code. Recall it in Codex. Keep the record in
+your own Obsidian vault, alongside your notes, with human text protected by
+the MCP server.
 
-## What it does
+mcp-brain is a native Rust executable for local Markdown and Obsidian PARA
+vaults. No Python, Node.js, model API key, or database service is required.
+Git is optional; Obsidian is optional too.
 
-- Provides `remember`, `recall`, `update_memory`, and `archive_memory` tools.
-- Separates global and project memories, records provenance and review dates,
-  and retains previous versions without returning stale history as current memory.
-- Lists, searches, and reads Markdown notes, with PARA filters and pagination.
-- Creates AI notes in Inbox and maintains folder indexes and parent links.
-- Edits AI-authored bodies while retaining human `## Notes` verbatim.
-- Appends or revises a marked `## AI` section in human notes.
-- Counts Inbox captures and prepares sorting proposals for local approval.
-- Offers opt-in review reminders, with due checks and calendar export.
-- Commits exact AI snapshots and separate human checkpoints to a configured Git backup.
-- Exposes explicit fast-forward sync, freshness, pending pushes, and recovery.
-- Optionally watches human saves and supports local commits while offline.
-- Reviews overdue memories, changed sources, and possible duplicates or conflicts.
-- Builds a private full-text index and bounds recall context by a character budget.
-- Creates PARA folders with `init` and checks setup with `doctor`.
+[Get started](#get-started) · [Claude Code](#claude-code) · [Codex](#codex) ·
+[Other MCP clients](#other-mcp-clients) · [Documentation](#documentation)
 
-One native executable. No Python, Node.js, model API key, or database is needed
-at runtime. Git is required only for Git-backed vaults. Indexed search matches
-words; literal search remains available. Your connected assistant supplies the
-reasoning.
+## Get started
 
-## Install
+### 1. Install the executable
 
-Download a platform archive and `SHA256SUMS` from
-[GitHub Releases](https://github.com/btravers/mcp-brain/releases), verify its
-checksum, extract it, and put the executable on your `PATH`.
+Download the archive for your machine and
+[SHA256SUMS](https://github.com/btravers/mcp-brain/releases/latest/download/SHA256SUMS)
+from the same release. [Verify its checksum](docs/setup.md#install-a-release),
+extract it, and put `mcp-brain` on your `PATH` or use its absolute path.
 
-| Platform | Archive target |
+| Platform | Download |
 | --- | --- |
-| macOS, Apple Silicon | `aarch64-apple-darwin.tar.gz` |
-| Linux, x86-64 / amd64 | `x86_64-unknown-linux-musl.tar.gz` |
-| Linux, ARM64 / aarch64 | `aarch64-unknown-linux-musl.tar.gz` |
-| Windows, x86-64 | `x86_64-pc-windows-msvc.zip` |
+| macOS, Apple Silicon | [macOS ARM64](https://github.com/btravers/mcp-brain/releases/latest/download/mcp-brain-aarch64-apple-darwin.tar.gz) |
+| Linux, x86-64 / amd64 | [Linux amd64](https://github.com/btravers/mcp-brain/releases/latest/download/mcp-brain-x86_64-unknown-linux-musl.tar.gz) |
+| Linux, ARM64 / aarch64 | [Linux ARM64](https://github.com/btravers/mcp-brain/releases/latest/download/mcp-brain-aarch64-unknown-linux-musl.tar.gz) |
+| Windows, x86-64 | [Windows amd64](https://github.com/btravers/mcp-brain/releases/latest/download/mcp-brain-x86_64-pc-windows-msvc.zip) |
 
-Linux releases use musl. Windows ARM64 and Intel macOS binaries are not part of
-the initial release matrix. macOS binaries are not notarized.
+```sh
+mcp-brain --version
+```
 
-With Rust 1.93 or newer:
+Linux binaries use musl; Windows binaries include their compiler runtime.
+macOS binaries are not notarized. Intel macOS and Windows ARM64 builds are not
+currently provided. Downloads live under [Releases](https://github.com/btravers/mcp-brain/releases).
+
+<details>
+<summary>Build from source with Rust 1.93 or newer</summary>
 
 ```sh
 git clone git@github.com:btravers/mcp-brain.git
@@ -56,56 +48,142 @@ cd mcp-brain
 cargo install --path . --locked
 ```
 
-## Connect your assistant
+</details>
 
-Use your own absolute executable and vault paths:
+### 2. Choose your vault
+
+Use an existing vault, or create a new one with the PARA directories:
 
 ```sh
-codex mcp add brain -- /absolute/path/to/mcp-brain --vault /absolute/path/to/vault serve
-claude mcp add --transport stdio --scope user brain -- /absolute/path/to/mcp-brain --vault /absolute/path/to/vault serve
+mcp-brain --vault "/absolute/path/to/vault" init
+mcp-brain --vault "/absolute/path/to/vault" doctor
 ```
 
-For a new vault, run `mcp-brain --vault /absolute/path/to/vault init` first.
-Use `doctor` to check setup. See [sync, watching, and offline settings](docs/setup.md#synchronize-and-work-offline)
-for optional automation; reads remain local by default.
+`init` preserves existing notes and creates missing directories. It also prints
+client configuration examples; it does not register the server for you.
+For a Git vault, configure its intended backup upstream and authentication
+before writing through MCP. See [vault setup](docs/setup.md#prepare-a-vault).
 
-Both clients launch the same executable against the same files. The server
-advertises its tools and instructions through MCP. Each client still needs its
-own registration. See [client setup](docs/setup.md) for JSON/TOML configuration,
-Windows examples, and how to check the connection.
+New to the project? The [practice vault tutorial](docs/tutorial.md) uses invented
+notes so you can try the ownership and review workflows first.
 
-Ask your assistant:
+## Connect your harness
 
-> Remember that I prefer concise explanations with runnable examples. This is
-> a global preference that I am explicitly stating now.
+Choose your assistant below. Replace the example executable and vault paths
+with your own **absolute paths**. Register each harness against the same vault.
 
-Then, from another connected provider:
+### Claude Code
 
-> Recall my communication preferences before answering.
+Register mcp-brain for your user account, so it is available across projects:
 
-These records live in your vault, independently of a provider's built-in memory.
-Built-in memories are not imported automatically. Read the
-[shared memory guide](docs/memory.md) for scope, updates, and retention.
+```sh
+claude mcp add --transport stdio --scope user brain -- "/absolute/path/to/mcp-brain" --vault "/absolute/path/to/vault" serve
+claude mcp list
+```
 
-You can also use ordinary notes as references:
+Start a new Claude Code session and use `/mcp` to check the connection.
+Then ask:
 
-> Use brain to find my existing notes about Rust ownership. Read relevant notes
-> before answering, and capture new insights in Inbox.
+> Use brain to remember that I prefer concise explanations with runnable
+> examples. This is a global preference I am explicitly stating now.
 
-Or:
+[Claude Code setup details](docs/setup.md#claude-code)
+
+### Codex
+
+Register the same executable and vault:
+
+```sh
+codex mcp add brain -- "/absolute/path/to/mcp-brain" --vault "/absolute/path/to/vault" serve
+codex mcp list
+```
+
+Start a new Codex session and use `/mcp` in the terminal UI to check the connection.
+Then ask:
+
+> Use brain to recall my communication preferences before answering.
+
+If you captured the preference from Claude Code above, Codex can retrieve that
+same Markdown record. You can also capture memories directly from Codex.
+
+<details>
+<summary>Configure Codex with TOML instead of the CLI</summary>
+
+Add this table to your user Codex configuration:
+
+```toml
+[mcp_servers.brain]
+command = "/absolute/path/to/mcp-brain"
+args = ["--vault", "/absolute/path/to/vault", "serve"]
+```
+
+</details>
+
+[Codex setup details](docs/setup.md#codex)
+
+### Other MCP clients
+
+Use a client that can launch a local **stdio MCP server**. Clients accepting
+`mcpServers` JSON can use:
+
+```json
+{
+  "mcpServers": {
+    "brain": {
+      "command": "/absolute/path/to/mcp-brain",
+      "args": ["--vault", "/absolute/path/to/vault", "serve"]
+    }
+  }
+}
+```
+
+The configuration file location and root key depend on the client. mcp-brain
+does not expose an HTTP endpoint. On Windows, use the full path to
+`mcp-brain.exe`; see the [Windows JSON example](docs/setup.md#other-stdio-mcp-clients).
+
+All clients must share the same local state directory as well as the vault.
+The default is derived from the vault path. If you set `--state-dir`, use the
+same value in every client and CLI command. Keep machine paths in local client
+settings, outside public repositories.
+
+## What you can do
+
+| Workflow | Tools and behavior |
+| --- | --- |
+| Share durable memory | `remember`, `recall`, `update_memory`, `archive_memory`; global/project scopes, provenance, and version history |
+| Find existing knowledge | `search_notes`, `list_notes`, `read_note`; indexed word search, literal search, PARA filters, and bounded recall |
+| Keep memory current | `memory_review` flags overdue records, changed sources, and possible overlaps or conflicts for review |
+| Capture and enrich notes | New AI notes land in Inbox; human notes accept suggestions in a marked AI section |
+| Consolidate your Inbox | Counts, review hints, and proposed moves with reasons; you inspect and approve the exact changes locally |
+| Back up and synchronize | Explicit fast-forward Git sync, separate human/AI commits, pending uploads, and recovery; optional watching and offline writes |
+
+Try these requests with your connected assistant:
+
+> Find my notes about Rust ownership. Read the relevant notes before answering.
 
 > Help me review my Inbox. Propose a destination and reason for each item, then
 > prepare a plan for me to inspect locally.
 
-## Ownership in the files
+> Review my memories for outdated information and changed sources. Show me the
+> findings before proposing corrections.
+
+Memory lives in ordinary Markdown, independently of a provider's built-in
+memory. Existing provider memories are not imported automatically. The harness
+must call `recall` for shared memory to influence its answer. See the
+[shared memory guide](docs/memory.md) for the complete workflow.
+
+## How your notes are protected
+
+Ownership checks run in Rust on every edit. They do not depend on the assistant
+remembering a rule in its instructions.
 
 | Note | Allowed changes through MCP |
 | --- | --- |
 | `author: human`, missing, or unrecognized author | Append/revise the marked trailing AI section; add missing parent metadata during organization |
-| `author: ai` | Replace the body; preserve frontmatter and trailing human Notes |
-| Malformed or ambiguous frontmatter | Read for diagnosis; refuse edits |
+| `author: ai` | Edit AI content while preserving the trailing human `## Notes` section; dedicated memory tools retain history |
+| Malformed or ambiguous frontmatter | Refuse edits; allow reading for diagnosis |
 
-Human notes use this optional trailing section:
+Suggestions in a human note use this trailing section:
 
 ```markdown
 ## AI
@@ -113,34 +191,49 @@ Human notes use this optional trailing section:
 Suggestions, questions, or related links from the assistant.
 ```
 
-An existing `## AI` heading without the marker remains human-owned. Every edit
-requires the current revision. There is no delete tool, generic write tool,
-ownership-changing tool, reminder-configuration tool, or plan-approval tool.
+An unmarked `## AI` heading remains human-owned. Every edit requires the current
+revision. Inbox moves need local approval, and there is no delete tool.
 
-These protections govern **calls through mcp-brain**. An agent that can write
-directly to the vault or run local approval commands can bypass them. For a
-stronger boundary, restrict the agent's filesystem and shell access separately.
-See [ownership and privacy](docs/design.md).
+**These protections apply to calls through mcp-brain.** An assistant with direct
+filesystem or unrestricted shell access can bypass them. Restrict that access
+separately when you need a stronger boundary. Note contents returned to a client
+may be sent to its model provider. See [ownership and privacy](docs/design.md).
+
+## Optional Git automation and reminders
+
+Reads stay local by default. For a Git vault, strict backup requires a successful
+initial push before an MCP note write. AI commits contain the planned text and
+bypass commit hooks and automatic signing; human checkpoints use ordinary Git
+commit. Review the [Git setup and limitations](docs/setup.md#prepare-a-vault).
+
+| I want to… | Start here |
+| --- | --- |
+| Check freshness, sync, or enable offline writes | [Sync and local configuration](docs/setup.md#synchronize-and-work-offline) |
+| Back up human saves after editing stops | [Foreground watcher](docs/setup.md#back-up-human-saves-from-obsidian) |
+| Retry a failed push or interrupted write | [Recovery](docs/inbox.md#recover-from-an-interrupted-write) |
+| Set a review cadence and get calendar reminders | [Inbox and reminders](docs/inbox.md) |
+
+Watching, background sync, offline writes, and reminders are opt-in. No daemon,
+calendar event, or OS scheduler job is installed automatically.
 
 ## Documentation
 
-- [Tutorial: try a practice vault](docs/tutorial.md)
-- [How to share durable memory across providers](docs/memory.md)
-- [How to install and connect clients](docs/setup.md)
-- [How to review Inbox and configure reminders](docs/inbox.md)
-- [Tool and CLI reference](docs/reference.md)
-- [Ownership, privacy, and design limits](docs/design.md)
-- [Contributing and releasing](CONTRIBUTING.md)
+- [Practice vault tutorial](docs/tutorial.md) — try capture, ownership, and review.
+- [Shared memory guide](docs/memory.md) — scopes, provenance, corrections, and retention.
+- [Setup guide](docs/setup.md) — installation, harness configuration, Git, and troubleshooting.
+- [Inbox guide](docs/inbox.md) — approve sorting plans and configure reminders.
+- [Tool and CLI reference](docs/reference.md) — all 18 MCP tools and local commands.
+- [Design and privacy](docs/design.md) — guarantees, tradeoffs, and limitations.
 
-## Development
+## Contribute or get help
 
-```sh
-cargo fmt --all --check
-cargo test --locked
-cargo clippy --locked --all-targets -- -D warnings
-```
+Use [Discussions](https://github.com/btravers/mcp-brain/discussions) for questions
+and ideas, and [Issues](https://github.com/btravers/mcp-brain/issues) for bugs.
+Use invented examples in public reports; keep private notes and credentials out.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development and release instructions,
+or [SECURITY.md](SECURITY.md) for security reporting.
 
-Tests use invented notes in temporary directories. They include real stdio MCP
-sessions and a local Git backup fixture. No personal vault is needed.
+Tests use temporary vaults and invented notes, including real stdio MCP sessions
+and local Git remotes. CI covers macOS ARM64, Linux amd64/ARM64, and Windows amd64.
 
-MIT licensed. Author: Benoit TRAVERS.
+[MIT licensed](LICENSE). Author: Benoit TRAVERS.
