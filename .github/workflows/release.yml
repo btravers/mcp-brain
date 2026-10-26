@@ -45,7 +45,7 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: |
           mkdir -p dist package
-          cp "target/$TARGET/release/mcp-brain" README.md LICENSE package/
+          cp "target/$TARGET/release/mcp-brain" README.md CONTRIBUTING.md SECURITY.md LICENSE package/
           cp -R docs package/docs
           tar -czf "dist/mcp-brain-$TARGET.tar.gz" -C package .
       - name: Package Windows
@@ -55,7 +55,7 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: |
           New-Item -ItemType Directory -Path dist,package
-          Copy-Item "target/$env:TARGET/release/mcp-brain.exe",README.md,LICENSE -Destination package
+          Copy-Item "target/$env:TARGET/release/mcp-brain.exe",README.md,CONTRIBUTING.md,SECURITY.md,LICENSE -Destination package
           Copy-Item docs -Destination package/docs -Recurse
           Compress-Archive -Path package/* -DestinationPath "dist/mcp-brain-$env:TARGET.zip"
       - uses: actions/upload-artifact@v4
