@@ -43,7 +43,8 @@ Keep the documented limitations accurate when extending supported workflows.
 
 CI runs formatting, tests, and Clippy on macOS ARM64, Linux x86-64, Linux ARM64,
 and Windows x86-64. Release builds additionally test the target binaries and
-package Linux with musl. See GitHub's [runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
+package Linux with musl and Windows with a statically linked compiler runtime.
+See GitHub's [runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
 for the platform labels used in the workflows.
 
 To prepare a release:

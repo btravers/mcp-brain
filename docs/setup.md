@@ -32,7 +32,7 @@ On Windows, extract `mcp-brain.exe` to a stable directory and either add that
 directory to your user `PATH` or use its absolute path in client settings.
 
 The release workflow builds macOS ARM64, Linux x86-64 and ARM64 with musl,
-and Windows x86-64. The executable uses OS facilities; it needs no language
+and Windows x86-64 with its compiler runtime linked statically. The executable uses OS facilities; it needs no language
 runtime, database, or model credentials. Git-backed vaults also need Git,
 working authentication, and a configured upstream.
 
