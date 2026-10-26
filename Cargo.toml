@@ -1,0 +1,34 @@
+[package]
+name = "mcp-brain"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.93"
+authors = ["Benoit TRAVERS <benoit.travers.fr@gmail.com>"]
+description = "Ownership-aware MCP memory for local Markdown and Obsidian PARA vaults"
+license = "MIT"
+repository = "https://github.com/btravers/mcp-brain"
+readme = "README.md"
+
+[dependencies]
+anyhow = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+clap = { version = "4", features = ["derive"] }
+directories = "6"
+pulldown-cmark = { version = "0.13", default-features = false }
+rmcp = { version = "3.7", default-features = false, features = ["server", "macros", "transport-io"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tempfile = "3"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+uuid = { version = "1", features = ["v4"] }
+walkdir = "2"
+yaml_serde = "0.10"
+
+[dev-dependencies]
+rmcp = { version = "3.7", default-features = false, features = ["client", "transport-child-process"] }
+
+[profile.release]
+strip = true
+lto = "thin"
+codegen-units = 1
