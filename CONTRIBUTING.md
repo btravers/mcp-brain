@@ -36,6 +36,10 @@ The author identity in package metadata is intentionally public.
 | `src/index.rs` | Rebuildable word postings and content-hash invalidation |
 | `src/server.rs` | Typed MCP tools and initialization instructions |
 | `src/main.rs` | Local CLI and human approval boundary |
+| `src/terminal.rs` | Human-readable views and resumable, line-oriented review |
+| `src/screen.rs` | Ratatui full-screen review, Markdown, input, scrollbars and immediate item application |
+| `src/picker.rs`, `src/plans.rs` | Recent-plan selection, filtering, progress and freshness |
+| `src/undo.rs` | Guarded reversal of individual saves, receipts and generated-index archives |
 
 Avoid exposing a generic write, delete, shell, author-change, or approval tool.
 Do not solve a link-repair problem by silently rewriting protected human text.

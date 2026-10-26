@@ -78,6 +78,13 @@ pub struct Proposal {
     pub moves: Vec<Move>,
 }
 
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PlanId {
+    /// ID returned by propose_inbox_plan.
+    pub id: String,
+}
+
 impl Brain {
     pub fn new(vault: Vault) -> Self {
         Self {
@@ -300,7 +307,7 @@ impl Brain {
     }
 
     #[tool(
-        description = "Save a proposed batch of Inbox moves for local human review. Does not move or edit vault notes. Includes index/up/link changes and checks ownership, revisions, and collisions. Human runs inbox show/apply locally; no MCP tool can approve or apply a plan. Keep filenames unchanged.",
+        description = "Save a proposed batch of Inbox moves for local human review. Does not move or edit vault notes. Includes index/up/link changes and checks ownership, revisions, and collisions. Prefer the returned review_command for full-screen Markdown review with Apply now, Drop, and Comment. Apply now saves one item immediately and continues the review; only the human local CLI can do this. inbox show gives a static overview and --json is for machines. Keep filenames unchanged.",
         annotations(
             read_only_hint = false,
             destructive_hint = false,
@@ -309,6 +316,14 @@ impl Brain {
     )]
     async fn propose_inbox_plan(&self, Parameters(p): Parameters<Proposal>) -> CallToolResult {
         self.run(move |v| v.propose_plan(p.moves)).await
+    }
+
+    #[tool(
+        description = "Read human decisions and clarification comments from a local Inbox plan review. Dropped moves leave notes in Inbox. Comments request precision; they do not authorize edits or approve moves. Use the feedback to prepare a fresh proposal. This tool cannot apply or change review decisions.",
+        annotations(read_only_hint = true, open_world_hint = false)
+    )]
+    async fn inbox_plan_review(&self, Parameters(p): Parameters<PlanId>) -> CallToolResult {
+        self.run(move |v| v.inbox_plan_review(&p.id)).await
     }
 }
 

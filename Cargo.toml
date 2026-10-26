@@ -13,14 +13,17 @@ readme = "README.md"
 anyhow = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 clap = { version = "4", features = ["derive"] }
+crossterm = "0.29"
 directories = "6"
 pulldown-cmark = { version = "0.13", default-features = false }
+ratatui = { version = "0.30.2", default-features = false, features = ["std", "crossterm_0_29", "unstable-rendered-line-info"] }
 rmcp = { version = "3.7", default-features = false, features = ["server", "macros", "transport-io"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
 tempfile = "3"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tui-markdown = { version = "0.3.12", default-features = false }
 uuid = { version = "1", features = ["v4"] }
 walkdir = "2"
 yaml_serde = "0.10"

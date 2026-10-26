@@ -25,6 +25,7 @@ relative to the configured vault. Pagination offsets are zero-based.
 | `inbox_status` | None | Capture count, oldest modification time, reminder configuration and due status |
 | `inbox_review` | Optional `offset`, `limit` | Previews, lexical folder matches, review questions, status |
 | `propose_inbox_plan` | `moves` | Saves a local plan; returns ID, move descriptions, changed paths, expiry, approval command |
+| `inbox_plan_review` | `id` | Read-only human decisions and precision comments from a local review; cannot approve or edit decisions |
 | `sync_status` | None | Last successful sync/error, cached ahead/behind counts, local policy, pending pushes and journals; no network |
 | `sync_vault` | None | Explicit fetch, fast-forward, push; refuses dirty trees, divergence, and incomplete transactions |
 | `search_notes` | `query`; optional `category`, `offset`, `limit` | Indexed full-text word search; ranked metadata and revisions |
@@ -165,7 +166,7 @@ after 24 hours. See [Inbox review](inbox.md) for approval and link restrictions.
 ## CLI
 
 ```text
-mcp-brain --vault PATH [--state-dir PATH] COMMAND
+mcp-brain --vault PATH [--state-dir PATH] [--json] [--color auto|always|never] COMMAND
 
 serve
 status
@@ -182,9 +183,13 @@ index rebuild
 search QUERY [--category CATEGORY] [--offset N] [--limit N]
 memory-review [--offset N] [--limit N]
 inbox status
+inbox plans [--limit N]
 inbox review [--offset N] [--limit N]
-inbox show PLAN_ID
+inbox review PLAN_ID [--plain]
+inbox show PLAN_ID [--details]
+inbox feedback PLAN_ID
 inbox apply PLAN_ID
+inbox undo PLAN_ID
 inbox mark-reviewed
 reminder configure --every-days N
 reminder disable
@@ -196,15 +201,45 @@ reminder calendar [--time HH:MM]
 is optional and must be outside the vault. `--help` and `--version` work without
 a vault. `inbox apply` requires interactive stdin and confirmation of the plan ID.
 `recover finish` similarly requires typing the displayed journal filename.
+`inbox undo` requires a terminal and confirmation of its displayed Undo ID.
 `config` without options displays current policy; omitted options retain their
 values. Periodic sync accepts at least 30 seconds, or 0 to disable it. Watch
 debounce accepts 1–3,600 seconds, default 10. `doctor` exits 1 on detected issues;
 it does not test remote authentication or contact the network. `recover push`
 reports a remaining upload failure in its JSON `warning`; inspect that field.
 
-Most commands print JSON. `serve` reserves stdout for MCP, `reminder check`
-prints a human message only when due, and `reminder calendar` prints iCalendar
-with CRLF line endings. Operational errors go to stderr and return exit code 1;
+Commands default to human-readable text and tables. Add global `--json` for
+structured output; it works before or after the subcommand. JSON output never
+contains ANSI colors. `--color auto` respects `NO_COLOR`, `TERM=dumb`, and
+redirected stdout; `always` and `never` override automatic color selection.
+The CLI output default is a change for scripts: add `--json` when parsing it.
+
+`inbox review PLAN_ID` requires interactive stdin and stdout. It opens a
+full-screen view with Markdown formatting, scrolling, a queue, action buttons,
+find and help. `a` immediately applies the current item; `d` drops its proposal;
+`c` saves a comment. Related effects are available in `v`. The same review can
+continue after its own writes, while unrelated edits and expiry still block
+application. The previous line-oriented batch reviewer is available with
+`--plain`. Comments are limited to 4,000 UTF-8 bytes. Read-only
+`inbox_plan_review` returns them with per-item `applied` decisions,
+`applied_plan_id` receipts, and an `applied_count`. See
+[the review guide](inbox.md#review-one-item-at-a-time).
+
+Without an ID, interactive `inbox review` opens a recent-plan picker. It shows
+note names, progress and Ready/Stale/Expired/Complete status; internal previews
+are hidden. `inbox plans` provides a static list (`--limit` 1–200, default 50).
+Piped/JSON review output and nonzero offsets still list Inbox captures.
+
+In full-screen review, `u` reverses the last individually saved move; `U` shows
+its exact reversal. Later note edits block Undo. Comments and prior decisions
+are preserved; generated indexes are archived. `inbox undo PLAN_ID` offers a
+typed-confirmation equivalent. Older batch applications are not supported.
+Feedback also includes `undo_available` and `last_undo_id`.
+
+`serve` reserves stdout for MCP and keeps its structured protocol unchanged.
+`reminder check` prints a human message only when due, or a status object with
+`--json`. `reminder calendar` prints iCalendar with CRLF line endings and
+rejects `--json`. Operational errors go to stderr and return exit code 1;
 argument errors use Clap's exit status. `reminder check --exit-code` returns 3
 when due and 0 otherwise.
 
@@ -219,7 +254,7 @@ Use `--state-dir` when you need an explicit location. Unix state directories
 are mode `0700`; other platforms use the user's normal local permissions.
 
 State contains local policy, sync timestamps/errors, pending upload state,
-reminder preferences, plan files, applied-plan receipts, a search index, and
+reminder preferences, plan files, local review decisions/comments, applied-plan receipts, a search index, and
 unfinished transaction journals. Git vaults put the coordinator lock in Git
 metadata; other folders use a state-directory lock. Plans, indexes, and journals
 contain private information. Keep state private; do not commit it or place it in a shared folder.

@@ -167,6 +167,15 @@ Try these requests with your connected assistant:
 > Review my memories for outdated information and changed sources. Show me the
 > findings before proposing corrections.
 
+Local commands default to readable text and tables; add `--json` for scripts
+and LLMs. Use `inbox review` to pick a recent plan by note names and progress,
+or `inbox review PLAN_ID` to open it directly in a full-screen queue with formatted
+Markdown, scrolling and visible actions. Apply a move immediately, drop its
+proposal, or leave precision for the assistant. Saves advance to the next item,
+and you can resume the same review. Press `u` to undo the last saved move;
+later edits block reversal. `--plain` keeps the basic batch workflow.
+See the [Inbox review guide](docs/inbox.md#review-one-item-at-a-time).
+
 Memory lives in ordinary Markdown, independently of a provider's built-in
 memory. Existing provider memories are not imported automatically. The harness
 must call `recall` for shared memory to influence its answer. See the
@@ -222,7 +231,7 @@ calendar event, or OS scheduler job is installed automatically.
 - [Shared memory guide](docs/memory.md) — scopes, provenance, corrections, and retention.
 - [Setup guide](docs/setup.md) — installation, harness configuration, Git, and troubleshooting.
 - [Inbox guide](docs/inbox.md) — approve sorting plans and configure reminders.
-- [Tool and CLI reference](docs/reference.md) — all 18 MCP tools and local commands.
+- [Tool and CLI reference](docs/reference.md) — MCP tools and local commands.
 - [Design and privacy](docs/design.md) — guarantees, tradeoffs, and limitations.
 
 ## Contribute or get help

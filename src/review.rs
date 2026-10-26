@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Move {
     /// Exact current vault-relative Inbox note path.
@@ -30,6 +30,56 @@ pub struct Plan {
     pub moves: Vec<Move>,
     pub snapshot: BTreeMap<String, String>,
     pub changes: Vec<Change>,
+    /// Internal item/subset previews are hidden from the recent-plan picker.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_plan_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Decision {
+    #[default]
+    Pending,
+    Accepted,
+    Dropped,
+    Commented,
+    Applied,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ItemReview {
+    pub decision: Decision,
+    pub comment: Option<String>,
+    #[serde(default)]
+    pub before_apply: Option<Decision>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReviewSession {
+    pub plan_id: String,
+    pub items: Vec<ItemReview>,
+    pub prepared_plan_id: Option<String>,
+    #[serde(default)]
+    pub applied_items: BTreeMap<usize, String>,
+    #[serde(default)]
+    pub last_item_plan_id: Option<String>,
+    #[serde(default)]
+    pub pending_item: Option<ItemApplication>,
+    #[serde(default)]
+    pub undo_stack: Vec<usize>,
+    #[serde(default)]
+    pub last_undo_id: Option<String>,
+    #[serde(default)]
+    pub pending_undo_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ItemApplication {
+    pub index: usize,
+    pub plan_id: String,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -139,6 +189,10 @@ impl Vault {
 
     pub fn propose_plan(&self, moves: Vec<Move>) -> Result<Value> {
         let _lock = self.lock()?;
+        self.propose_plan_unlocked(moves)
+    }
+
+    fn propose_plan_unlocked(&self, moves: Vec<Move>) -> Result<Value> {
         ensure!(
             !moves.is_empty() && moves.len() <= 100,
             "plan must contain 1–100 moves"
@@ -257,6 +311,7 @@ impl Vault {
             moves,
             snapshot,
             changes,
+            parent_plan_id: None,
         };
         self.write_state(
             &format!("plan-{}.json", plan.id),
@@ -264,7 +319,8 @@ impl Vault {
         )?;
         Ok(
             json!({"id":plan.id,"moves":plan.moves,"changed_paths":plan.changes.iter().map(|c|&c.path).collect::<Vec<_>>(),
-            "expires":plan.created+Duration::hours(24),"approval":"Review the plan with inbox show <id>, then run inbox apply <id> locally. There is no MCP apply tool.",
+            "expires":plan.created+Duration::hours(24),"approval":"Open inbox review <id> for full-screen Markdown review. Apply now immediately saves the displayed move and advances; drop and comment keep the note in Inbox. Use v to inspect exact effects, inbox show for a static overview, and --json for machines. There is no MCP apply tool.",
+            "review_command":format!("mcp-brain --vault <path> inbox review {}",plan.id),
             "command":format!("mcp-brain --vault <path> inbox apply {}",plan.id)}),
         )
     }
@@ -283,14 +339,364 @@ impl Vault {
         Ok(plan)
     }
 
-    /// Called only by the local CLI after showing the plan and reading approval.
-    pub fn apply_plan(&self, id: &str) -> Result<Outcome> {
-        let _lock = self.lock()?;
+    /// Review feedback stays in private local state, never in the source note.
+    pub fn review_session(&self, id: &str) -> Result<ReviewSession> {
+        let plan = self.load_plan(id)?;
+        let mut session = self
+            .read_state(&format!("review-{id}.json"))?
+            .map(|s| serde_json::from_str::<ReviewSession>(&s))
+            .transpose()?
+            .unwrap_or_else(|| ReviewSession {
+                plan_id: id.into(),
+                items: vec![ItemReview::default(); plan.moves.len()],
+                prepared_plan_id: None,
+                applied_items: BTreeMap::new(),
+                last_item_plan_id: None,
+                pending_item: None,
+                undo_stack: Vec::new(),
+                last_undo_id: None,
+                pending_undo_id: None,
+            });
         ensure!(
-            self.read_state(&format!("applied-{id}.json"))?.is_none(),
+            session.plan_id == id && session.items.len() == plan.moves.len(),
+            "review does not match this plan"
+        );
+        if self.read_state(&format!("applied-{id}.json"))?.is_some()
+            && self.read_state(&format!("undone-{id}.json"))?.is_none()
+        {
+            for index in 0..session.items.len() {
+                session.items[index].decision = Decision::Applied;
+                session.applied_items.insert(index, id.into());
+            }
+        }
+        if let Some(prepared) = &session.prepared_plan_id {
+            let prepared = self.load_plan(prepared)?;
+            if self
+                .read_state(&format!("applied-{}.json", prepared.id))?
+                .is_some()
+                && self
+                    .read_state(&format!("undone-{}.json", prepared.id))?
+                    .is_none()
+            {
+                for (index, item) in plan.moves.iter().enumerate() {
+                    if prepared.moves.iter().any(|m| m.source == item.source) {
+                        session.items[index].decision = Decision::Applied;
+                        session.applied_items.insert(index, prepared.id.clone());
+                    }
+                }
+                if session.last_item_plan_id.is_none() {
+                    session.last_item_plan_id = Some(prepared.id);
+                }
+            }
+        }
+        // The application intent is durable before writing notes. A receipt
+        // completes it even if the process exited before saving the UI state.
+        if let Some(pending) = session.pending_item.clone() {
+            self.load_plan(&pending.plan_id)?;
+            ensure!(
+                pending.index < session.items.len(),
+                "invalid pending review item"
+            );
+            if self
+                .read_state(&format!("applied-{}.json", pending.plan_id))?
+                .is_some()
+            {
+                session.items[pending.index].decision = Decision::Applied;
+                session
+                    .applied_items
+                    .insert(pending.index, pending.plan_id.clone());
+                session.last_item_plan_id = Some(pending.plan_id);
+                if !session.undo_stack.contains(&pending.index) {
+                    session.undo_stack.push(pending.index);
+                }
+                session.last_undo_id = None;
+                session.pending_item = None;
+            }
+        }
+        // Older item reviews recorded only the last receipt. Preserve one-level Undo.
+        if session.undo_stack.is_empty()
+            && let Some(last) = &session.last_item_plan_id
+            && let Some((&index, _)) = session
+                .applied_items
+                .iter()
+                .find(|(_, applied)| *applied == last)
+            && self.load_plan(last)?.moves.len() == 1
+        {
+            session.undo_stack.push(index);
+        }
+        if let Some(undo_id) = session.pending_undo_id.clone() {
+            let undo = self.load_review_undo(&undo_id)?;
+            if self
+                .read_state(&format!("undone-{}.json", undo.applied_plan_id))?
+                .is_some()
+            {
+                self.finish_review_undo(&mut session, &undo)?;
+            }
+        }
+        Ok(session)
+    }
+
+    pub fn review_applied(&self, session: &ReviewSession) -> Result<bool> {
+        if !session.applied_items.is_empty() {
+            return Ok(true);
+        }
+        if self
+            .read_state(&format!("applied-{}.json", session.plan_id))?
+            .is_some()
+        {
+            return Ok(true);
+        }
+        Ok(match &session.prepared_plan_id {
+            Some(id) => self.read_state(&format!("applied-{id}.json"))?.is_some(),
+            None => !session.applied_items.is_empty(),
+        })
+    }
+
+    pub fn record_review(
+        &self,
+        id: &str,
+        index: usize,
+        decision: Decision,
+        comment: Option<String>,
+    ) -> Result<ReviewSession> {
+        let _lock = self.lock()?;
+        let mut session = self.review_session(id)?;
+        ensure!(index < session.items.len(), "review item is out of range");
+        ensure!(
+            session.items[index].decision != Decision::Applied,
+            "item was already applied"
+        );
+        ensure!(
+            decision != Decision::Applied,
+            "only applying a move can mark it applied"
+        );
+        if let Some(comment) = &comment {
+            ensure!(
+                !comment.trim().is_empty() && comment.len() <= 4000,
+                "comments must contain 1–4000 bytes"
+            );
+        }
+        ensure!(
+            decision != Decision::Commented || comment.is_some(),
+            "a clarification needs a comment"
+        );
+        session.items[index].decision = decision;
+        if comment.is_some() {
+            session.items[index].comment = comment;
+        }
+        session.prepared_plan_id = None;
+        self.save_review(&session)?;
+        Ok(session)
+    }
+
+    /// Read-only MCP feedback. Comments request a new proposal; they approve nothing.
+    pub fn inbox_plan_review(&self, id: &str) -> Result<Value> {
+        let plan = self.load_plan(id)?;
+        let session = self.review_session(id)?;
+        Ok(json!({
+            "id": id,
+            "expires": plan.created + Duration::hours(24),
+            "applied": self.review_applied(&session)?,
+            "prepared_plan_id": session.prepared_plan_id,
+            "applied_count": session.applied_items.len(),
+            "last_item_plan_id": session.last_item_plan_id,
+            "pending_item": session.pending_item,
+            "last_undo_id": session.last_undo_id,
+            "undo_available": !session.undo_stack.is_empty(),
+            "items": plan.moves.iter().zip(&session.items).enumerate().map(|(index, (item, review))| json!({
+                "source": item.source, "destination": item.destination,
+                "reason": item.reason, "expected_revision": item.expected_revision,
+                "decision": review.decision, "comment": review.comment,
+                "applied_plan_id": session.applied_items.get(&index),
+            })).collect::<Vec<_>>(),
+            "guidance": "Human comments are clarification requests, not approval. Read relevant notes and prepare a fresh revision-checked proposal. Only the local CLI can apply moves."
+        }))
+    }
+
+    /// Recompute all index/link changes for the accepted subset, under the original snapshot.
+    /// Never filter the old changes: an index can depend on several moves together.
+    pub fn prepare_review_plan(&self, id: &str) -> Result<Plan> {
+        let _lock = self.lock()?;
+        let original = self.load_plan(id)?;
+        let mut session = self.review_session(id)?;
+        let expected = self.review_checkpoint(&original, &session)?;
+        let selected: Vec<_> = original
+            .moves
+            .iter()
+            .zip(&session.items)
+            .filter(|(_, review)| review.decision == Decision::Accepted)
+            .map(|(item, _)| {
+                let mut item = item.clone();
+                item.expected_revision = expected
+                    .get(&item.source)
+                    .context("review source is missing")?
+                    .clone();
+                Ok(item)
+            })
+            .collect::<Result<_>>()?;
+        ensure!(!selected.is_empty(), "no moves accepted; no notes changed");
+        let proposal = self.propose_plan_unlocked(selected)?;
+        let mut prepared = self.load_plan(proposal["id"].as_str().unwrap())?;
+        prepared.parent_plan_id = Some(id.into());
+        self.write_state(
+            &format!("plan-{}.json", prepared.id),
+            &serde_json::to_string_pretty(&prepared)?,
+        )?;
+        ensure!(
+            prepared.snapshot == expected,
+            "vault changed during review; generate a fresh proposal"
+        );
+        session.prepared_plan_id = Some(prepared.id.clone());
+        self.write_state(
+            &format!("review-{id}.json"),
+            &serde_json::to_string_pretty(&session)?,
+        )?;
+        Ok(prepared)
+    }
+
+    pub(crate) fn save_review(&self, session: &ReviewSession) -> Result<()> {
+        self.write_state(
+            &format!("review-{}.json", session.plan_id),
+            &serde_json::to_string_pretty(session)?,
+        )
+    }
+
+    fn review_checkpoint(
+        &self,
+        original: &Plan,
+        session: &ReviewSession,
+    ) -> Result<BTreeMap<String, String>> {
+        self.require_recovered()?;
+        ensure!(
+            Utc::now() - original.created < Duration::hours(24),
+            "plan expired; generate a fresh proposal"
+        );
+        ensure!(
+            self.read_state(&format!("applied-{}.json", original.id))?
+                .is_none(),
             "plan was already applied"
         );
-        let plan = self.load_plan(id)?;
+        let expected = self.review_expected_snapshot(original, session)?;
+        ensure!(
+            self.snapshot()? == expected,
+            "vault changed outside this review; generate a fresh proposal for the remaining notes"
+        );
+        Ok(expected)
+    }
+
+    pub(crate) fn review_expected_snapshot(
+        &self,
+        original: &Plan,
+        session: &ReviewSession,
+    ) -> Result<BTreeMap<String, String>> {
+        if let Some(id) = &session.last_undo_id {
+            let undo = self.load_review_undo(id)?;
+            ensure!(
+                self.read_state(&format!("undone-{}.json", undo.applied_plan_id))?
+                    .is_some(),
+                "undo checkpoint has no receipt"
+            );
+            return Ok(snapshot_after(undo.snapshot, &undo.changes));
+        }
+        let expected = if let Some(id) = &session.last_item_plan_id {
+            ensure!(
+                self.read_state(&format!("applied-{id}.json"))?.is_some(),
+                "review checkpoint has no application receipt"
+            );
+            let last = self.load_plan(id)?;
+            snapshot_after(last.snapshot, &last.changes)
+        } else {
+            original.snapshot.clone()
+        };
+        Ok(expected)
+    }
+
+    /// Prepare the exact current item and its index/link effects for local review.
+    pub fn review_item_plan(&self, id: &str, index: usize) -> Result<Plan> {
+        let _lock = self.lock()?;
+        let original = self.load_plan(id)?;
+        let session = self.review_session(id)?;
+        let expected = self.review_checkpoint(&original, &session)?;
+        let mut item = original
+            .moves
+            .get(index)
+            .context("review item is out of range")?
+            .clone();
+        ensure!(
+            session.items[index].decision != Decision::Applied,
+            "item was already applied"
+        );
+        item.expected_revision = expected
+            .get(&item.source)
+            .context("review source is missing")?
+            .clone();
+        let proposal = self.propose_plan_unlocked(vec![item])?;
+        let mut prepared = self.load_plan(proposal["id"].as_str().unwrap())?;
+        prepared.parent_plan_id = Some(id.into());
+        self.write_state(
+            &format!("plan-{}.json", prepared.id),
+            &serde_json::to_string_pretty(&prepared)?,
+        )?;
+        ensure!(
+            prepared.snapshot == expected,
+            "vault changed during review; generate a fresh proposal"
+        );
+        Ok(prepared)
+    }
+
+    /// Local CLI only: the explicit Apply action approves this displayed item.
+    pub fn apply_review_item(&self, id: &str, index: usize, prepared_id: &str) -> Result<Outcome> {
+        let _lock = self.lock()?;
+        let original = self.load_plan(id)?;
+        let mut session = self.review_session(id)?;
+        let expected = self.review_checkpoint(&original, &session)?;
+        let mut item = original
+            .moves
+            .get(index)
+            .context("review item is out of range")?
+            .clone();
+        ensure!(
+            session.items[index].decision != Decision::Applied,
+            "item was already applied"
+        );
+        item.expected_revision = expected
+            .get(&item.source)
+            .context("review source is missing")?
+            .clone();
+        let prepared = self.load_plan(prepared_id)?;
+        ensure!(
+            prepared.moves == vec![item] && prepared.snapshot == expected,
+            "item preview does not match this review; inspect a fresh preview"
+        );
+        self.validate_plan(&prepared)?;
+        session.items[index].before_apply = Some(session.items[index].decision);
+        session.pending_item = Some(ItemApplication {
+            index,
+            plan_id: prepared.id.clone(),
+        });
+        self.save_review(&session)?;
+        let outcome = self.apply_plan_unlocked(&prepared)?;
+        session.items[index].decision = Decision::Applied;
+        session.applied_items.insert(index, prepared.id.clone());
+        session.last_item_plan_id = Some(prepared.id.clone());
+        session.last_undo_id = None;
+        session.undo_stack.push(index);
+        session.pending_item = None;
+        self.save_review(&session)?;
+        Ok(outcome)
+    }
+
+    pub fn has_review(&self, id: &str) -> Result<bool> {
+        self.load_plan(id)?;
+        Ok(self.read_state(&format!("review-{id}.json"))?.is_some())
+    }
+
+    fn validate_plan(&self, plan: &Plan) -> Result<()> {
+        ensure!(
+            self.read_state(&format!("applied-{}.json", plan.id))?
+                .is_none(),
+            "plan was already applied"
+        );
         ensure!(
             Utc::now() - plan.created < Duration::hours(24),
             "plan expired; generate a fresh proposal"
@@ -299,9 +705,21 @@ impl Vault {
             self.snapshot()? == plan.snapshot,
             "vault changed since the proposal; generate a new plan"
         );
+        Ok(())
+    }
+
+    /// Called only by the local CLI after showing the plan and reading approval.
+    pub fn apply_plan(&self, id: &str) -> Result<Outcome> {
+        let _lock = self.lock()?;
+        let plan = self.load_plan(id)?;
+        self.apply_plan_unlocked(&plan)
+    }
+
+    fn apply_plan_unlocked(&self, plan: &Plan) -> Result<Outcome> {
+        self.validate_plan(plan)?;
         let outcome = self.apply(&plan.changes, "consolidate inbox")?;
         self.write_state(
-            &format!("applied-{id}.json"),
+            &format!("applied-{}.json", plan.id),
             &serde_json::to_string(&outcome)?,
         )?;
         self.mark_reviewed_unlocked()?;
@@ -309,7 +727,21 @@ impl Vault {
     }
 }
 
-fn is_index(path: &str) -> bool {
+pub(crate) fn snapshot_after(
+    mut snapshot: BTreeMap<String, String>,
+    changes: &[Change],
+) -> BTreeMap<String, String> {
+    for change in changes {
+        if let Some(after) = &change.after {
+            snapshot.insert(change.path.clone(), note::revision(after));
+        } else {
+            snapshot.remove(&change.path);
+        }
+    }
+    snapshot
+}
+
+pub(crate) fn is_index(path: &str) -> bool {
     path.rsplit_once('/').is_some_and(|(folder, file)| {
         folder
             .rsplit('/')

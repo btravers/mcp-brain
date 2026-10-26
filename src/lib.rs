@@ -3,6 +3,8 @@ pub mod index;
 pub mod memory;
 pub mod note;
 pub mod operations;
+pub mod plans;
 pub mod review;
 pub mod server;
+pub mod undo;
 pub mod vault;

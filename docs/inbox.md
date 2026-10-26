@@ -26,8 +26,126 @@ Inspect the complete proposal locally:
 mcp-brain --vault /absolute/path/to/vault inbox show PLAN_ID
 ```
 
-The output includes proposed moves, their reasons, and before/after text for
-every affected note or index. It contains private note content: keep it local.
+The default view shows a table of notes, destinations and review decisions,
+followed by each move's full path and reason. Colors are automatic in a terminal;
+`NO_COLOR`, `TERM=dumb`, or `--color never` disables them. Redirected output is
+plain text. For every affected note and index, add `--details` to see exact
+before/after text. Use `--json` explicitly for scripts or LLMs:
+
+```sh
+mcp-brain --vault /absolute/path/to/vault inbox show PLAN_ID --details
+mcp-brain --vault /absolute/path/to/vault inbox show PLAN_ID --json
+```
+
+These views contain private note content: keep them local.
+
+## Review one item at a time
+
+Open the proposal in an interactive terminal:
+
+```sh
+mcp-brain --vault /absolute/path/to/vault inbox review
+# Or open a known proposal directly:
+mcp-brain --vault /absolute/path/to/vault inbox review PLAN_ID
+```
+
+Without an ID, the terminal opens a recent-plan picker showing note names,
+progress, creation time and status. Use arrows to select, Enter to open, `/`
+to filter, or `r` to refresh. Ready reviews appear first; internal item previews
+are hidden. Stale and expired proposals remain available for inspection.
+Selecting a plan does not approve any move. Use `inbox plans` for a static
+table or `inbox plans --json` for machine output.
+
+The reviewer uses the full terminal. A queue shows progress; the main pane
+separates the suggested destination and reason from the summary and formatted
+Markdown. Long notes have a scrollbar. Resize the terminal to reflow the view.
+Headings, emphasis, lists, code blocks and tables are rendered as terminal text;
+images remain text descriptions and no remote resource is fetched.
+
+Press a key directly, or click its button; there is no Enter step for actions:
+
+| Action | Effect |
+| --- | --- |
+| `a` — Apply now | Save this move immediately, including its related file updates, then advance |
+| `d` — Drop | Exclude this proposal; the note stays in Inbox |
+| `c` — Comment | Save precision for the assistant and withhold the move |
+| `←` / `→`, `p` / `n` | Previous / next item, without changing its decision |
+| `↑` / `↓`, `j` / `k`, mouse wheel | Scroll the current document |
+| Page Up / Page Down, Space, Home / End | Scroll a page or reach the document ends |
+| `v` — View changes | Show the item's exact before/after values |
+| `u` — Undo last | Immediately reverse the last individual move saved in this review |
+| `U` — Undo details | Inspect the exact reversal before using `u` |
+| Tab | Cycle through Note, Exact changes and Review summary |
+| `s` — Summary | Show applied, dropped and commented items |
+| `f` | Jump to the next unresolved item |
+| `/` | Find a proposal by its name or reason |
+| `?` | Show keyboard and mouse help |
+| `q` / Escape | Close; saved moves and review decisions persist |
+
+**Apply now is the local approval for that displayed item.** It does not wait
+for a batch confirmation. The suggestion shows how many other files will be
+updated; inspect `v` before applying when you want their exact contents. Saved
+items are marked applied, and cannot be applied twice. If a save is running,
+exit waits for it to finish. Upload or recovery warnings remain visible.
+
+Drop and Comment only save private review state; they leave notes in Inbox.
+In the comment editor, Enter saves, Alt+Enter adds a line, and Escape cancels.
+Comments accept up to 4,000 UTF-8 bytes, including pasted text. Your comments
+are retained when an item is applied later.
+
+Resume with the same command and original plan ID. The review carries forward
+the exact effects of its own moves, including index and link updates. A later
+edit outside the review blocks further application and requires a fresh
+proposal; it is never silently included. The original 24-hour expiry still
+applies. Feedback remains readable after expiry.
+
+For a basic terminal or the earlier batch workflow, use
+`inbox review PLAN_ID --plain`. In that mode, enter a letter followed by Enter;
+`a` accepts for later, `f` previews the accepted subset, and typing `apply`
+confirms it. `TERM=dumb` requires this mode. `--json` remains for noninteractive
+commands; the MCP protocol is unchanged.
+
+Ask the assistant to call `inbox_plan_review` with the original plan ID to read
+your comments and prepare a more precise proposal. The tool is read-only; it
+cannot record decisions or approve moves. The same feedback is available locally:
+
+```sh
+mcp-brain --vault /absolute/path/to/vault inbox feedback PLAN_ID
+mcp-brain --vault /absolute/path/to/vault inbox feedback PLAN_ID --json
+```
+
+In pipes, with `--json`, or with a nonzero `--offset`, `inbox review` without
+an ID still lists Inbox captures. In a `TERM=dumb` terminal, it shows the static
+plan list; use an explicit ID and `--plain` to review one.
+
+## Undo the last saved move
+
+Press `u` in the full-screen reviewer to return the most recently moved note
+to Inbox and reverse its metadata, index and link updates. Undo restores the
+previous review decision and preserves comments. Successive presses reverse
+individual saves in order; you can then apply them again.
+
+The whole vault's Markdown snapshot must still match the review's last save.
+Any later note edit blocks Undo, including an edit to another note. Undo never
+overwrites those later edits. It uses the same checkpoint, journal and backup
+flow as other writes. An expired original proposal can still be undone when
+the snapshot matches, but applying again requires a valid proposal.
+
+Generated AI indexes are moved to `4 Archive/Review undo/` with unique filenames,
+rather than deleted. Their links to notes in this proposal become short wikilinks so
+they follow subsequent moves. Other restored text is byte-for-byte original.
+
+For a local command with an exact preview and typed confirmation:
+
+```sh
+mcp-brain --vault /absolute/path/to/vault inbox undo PLAN_ID
+```
+
+Undo supports individual saves from the full-screen reviewer, not older batch
+applications. There is no MCP Undo tool. If a save reports an upload or recovery
+warning, resolve that state before another write.
+
+## Apply a complete or previously reviewed plan
 
 Apply it from an interactive terminal:
 
@@ -35,7 +153,11 @@ Apply it from an interactive terminal:
 mcp-brain --vault /absolute/path/to/vault inbox apply PLAN_ID
 ```
 
-The command shows the same changes and asks you to type the full plan ID.
+The command shows exact changes and asks you to type the displayed plan ID.
+If you already saved review decisions, it prepares only the accepted moves;
+otherwise it uses the complete proposal. A subset gets its own plan ID because
+its index and link changes are recomputed. In `--json` mode, the preview and
+confirmation go to stderr; stdout contains only the final JSON result.
 There is no `--yes` flag or MCP apply tool. Plans expire after 24 hours and are
 rejected if the vault's note snapshot has changed. Generate a fresh proposal
 after editing any note.
