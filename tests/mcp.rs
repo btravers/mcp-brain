@@ -16,7 +16,7 @@ async fn stdio_client_discovers_tools_reads_captures_and_observes_rejections() -
         command.arg("--vault").arg(&root).arg("--state-dir").arg(&state).arg("serve");
         let client=().serve(TokioChildProcess::new(command)?).await?;
         let tools=client.list_all_tools().await?;
-        assert_eq!(tools.len(),10);
+        assert_eq!(tools.len(),14);
         assert!(!tools.iter().any(|t|t.name.contains("apply")||t.name.contains("delete")||t.name.contains("configure")));
         assert!(tools.iter().any(|t|t.name=="read_note" && t.annotations.as_ref().unwrap().read_only_hint==Some(true)));
         let context=client.call_tool(CallToolRequestParams::new("vault_context")).await?;
@@ -58,7 +58,7 @@ async fn legacy_initialize_and_json_lines_work_without_stdout_noise() -> Result<
         stdin.write_all(b"{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}\n").await?;
         stdin.write_all(b"{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}\n").await?;
         let response:serde_json::Value=serde_json::from_str(&lines.next_line().await?.unwrap())?;
-        assert_eq!(response["result"]["tools"].as_array().unwrap().len(),10);
+        assert_eq!(response["result"]["tools"].as_array().unwrap().len(),14);
         child.kill().await?;
         Ok::<_,anyhow::Error>(())
     }).await??;

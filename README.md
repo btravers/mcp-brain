@@ -1,16 +1,19 @@
 # mcp-brain
 
-Shared Markdown memory for MCP clients, with note ownership enforced in Rust.
+Portable LLM memory shared across AI providers, stored as Markdown.
 
 Connect Claude Code, Codex, or another local MCP client to the same Obsidian
-vault. Search existing knowledge, capture new memories, and comment on human
-notes without giving the model a general-purpose file editor.
+vault. Remember preferences, facts, decisions, and procedures; recall them from
+another provider; and preserve human notes through ownership checks in Rust.
 
 **Early release:** the ownership and workflow boundaries are tested, but this is
 not a filesystem sandbox. Start with the [practice vault tutorial](docs/tutorial.md).
 
 ## What it does
 
+- Provides `remember`, `recall`, `update_memory`, and `archive_memory` tools.
+- Separates global and project memories, records provenance and review dates,
+  and retains previous versions without returning stale history as current memory.
 - Lists, searches, and reads Markdown notes, with PARA filters and pagination.
 - Creates AI notes in Inbox and maintains folder indexes and parent links.
 - Edits AI-authored bodies while retaining human `## Notes` verbatim.
@@ -64,6 +67,19 @@ Windows examples, and how to check the connection.
 
 Ask your assistant:
 
+> Remember that I prefer concise explanations with runnable examples. This is
+> a global preference that I am explicitly stating now.
+
+Then, from another connected provider:
+
+> Recall my communication preferences before answering.
+
+These records live in your vault, independently of a provider's built-in memory.
+Built-in memories are not imported automatically. Read the
+[shared memory guide](docs/memory.md) for scope, updates, and retention.
+
+You can also use ordinary notes as references:
+
 > Use brain to find my existing notes about Rust ownership. Read relevant notes
 > before answering, and capture new insights in Inbox.
 
@@ -100,6 +116,7 @@ See [ownership and privacy](docs/design.md).
 ## Documentation
 
 - [Tutorial: try a practice vault](docs/tutorial.md)
+- [How to share durable memory across providers](docs/memory.md)
 - [How to install and connect clients](docs/setup.md)
 - [How to review Inbox and configure reminders](docs/inbox.md)
 - [Tool and CLI reference](docs/reference.md)

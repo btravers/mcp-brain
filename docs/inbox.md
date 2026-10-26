@@ -64,7 +64,7 @@ must change an existing `up: "[[0 Inbox]]"` to `up: "[[Gardening]]"` themselves.
 The server can add `up` if no such field exists.
 
 Short links such as `[[Herbs]]` survive moves when the filename is unique.
-Version 0.1 deliberately limits link rewriting: relative Markdown links/images
+Link rewriting is deliberately limited: relative Markdown links/images
 in moved notes and Markdown links to moved notes are blocked. Noncanonical
 wikilink paths also need manual repair. Queries in Obsidian plugins, arbitrary
 HTML links, canvases, and other non-Markdown formats are outside the resolver.

@@ -541,6 +541,10 @@ impl Vault {
         let before = self.read_text(path)?;
         let note = Note::parse(&before)?;
         note.check_revision(revision)?;
+        ensure!(
+            mode != "body" || !crate::memory::is_memory(&note),
+            "use update_memory for memory records so history and provenance are preserved"
+        );
         let after = match mode {
             "body" => note.replace_ai_body(body)?,
             "append" => note.set_ai_section(body, true)?,

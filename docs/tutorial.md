@@ -84,7 +84,23 @@ it also creates `0 Inbox/0 Inbox.md` and adds missing `up` fields to its childre
 Write a personal sentence under `## Notes` yourself. Then ask the assistant to
 revise the AI note. Your trailing section survives unchanged.
 
-## 6. Review the Inbox
+## 6. Try dedicated memory
+
+The previous captures are reference notes. To create an explicit memory, ask:
+
+> For this practice exercise, remember that examples should use small gardens.
+> Use scope project:brain-practice, type preference, and cite this tutorial
+> exercise as the source. I am explicitly stating this practice preference.
+
+Ask the same client, or another client registered to the practice vault:
+
+> Recall preferences for project:brain-practice.
+
+The assistant should use `recall` and return the shared memory with its source.
+It should not treat every ordinary note in the practice vault as a memory.
+See the [memory guide](memory.md) for corrections, review dates, and archiving.
+
+## 7. Review the Inbox
 
 Ask the assistant to review the captures and suggest PARA destinations. The
 assistant should classify by actionability, ask when a note fits two places,
@@ -95,7 +111,7 @@ that field yourself to the agreed destination's parent, then have the assistant
 read the note again and regenerate the proposal. The server refuses to replace
 an existing human metadata line.
 
-## 7. Remove the practice connection
+## 8. Remove the practice connection
 
 ```sh
 codex mcp remove brain-practice

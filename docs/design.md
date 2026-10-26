@@ -11,6 +11,30 @@ The vault remains ordinary Markdown. There is no private database format to
 export, no embedding service to operate, and no model credential in the server.
 Obsidian is a compatible editor, not a required runtime.
 
+## Memory is a layer over notes
+
+Reference notes and durable memory serve different purposes. A draft or human
+question should not automatically become a fact about the user. Dedicated
+memory tools create explicit records with stable IDs, types, scopes, provenance,
+review dates, and an active/archived lifecycle. They use the same ownership and
+revision checks as the note tools.
+
+All memory data and previous versions live in Markdown, so copying the notes to
+another machine or connecting another provider preserves the memory. There is
+no provider-specific store to migrate. The local state directory is used for
+review plans, locks, and reminders; it is not the memory database.
+
+Recall selects current content and keeps old versions out of its search corpus.
+Global and project scopes reduce irrelevant context; they are not access-control
+boundaries. Any client with these tools can explicitly request every scope.
+Sources and evidence categories are supplied by the caller and cannot establish
+truth by themselves. Semantic contradictions require the assistant and user to
+resolve them with an update or archive operation.
+
+The server does not read or synchronize a provider's built-in memory. Importing
+that material requires an explicit user-controlled export and review. A client
+must still call recall for the shared memory to influence its answer.
+
 ```mermaid
 flowchart LR
   A[Codex] --> M[mcp-brain stdio]

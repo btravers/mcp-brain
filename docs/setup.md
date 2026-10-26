@@ -160,7 +160,8 @@ them. Start with a request to consult memory, or put a short preference in each
 client's user instructions:
 
 > When relevant, use brain to search existing notes before answering. Capture
-> durable insights with its note tools. Use vault_context to read vault rules.
+> durable insights with remember and consult recall before answering, using the
+> relevant global or project scope. Use vault_context to read vault rules.
 
 The preference improves tool discovery. The preservation checks still run in
 the server even if a client forgets that preference.

@@ -111,7 +111,7 @@ impl<'a> Note<'a> {
         })
     }
 
-    pub fn body(&self) -> &str {
+    pub fn body(&self) -> &'a str {
         &self.text[self.body_start..]
     }
 

@@ -2,7 +2,7 @@
 
 ## MCP tools
 
-The server exposes ten tools over stdio. Successful results include structured
+The server exposes fourteen tools over stdio. Successful results include structured
 JSON and a textual representation for clients. Operation failures use MCP tool
 errors. Invalid arguments may be returned as protocol errors by the SDK.
 
@@ -11,11 +11,15 @@ relative to the configured vault. Pagination offsets are zero-based.
 
 | Tool | Arguments | Result / behavior |
 | --- | --- | --- |
+| `remember` | `title`, `content`, `memory_type`, `source`, `basis`; optional `scope`, `review_after` | Creates a durable memory note in Inbox; returns stable ID, revision, and write outcome |
+| `recall` | Optional `query`, `scope`, `memory_type`, `include_archived`, `offset`, `limit` | Ranked current memories with provenance, review status, annotations, and warnings |
+| `update_memory` | `id`, `expected_revision`, `content`, `source`, `basis`, `reason`; optional `review_after`, `reactivate` | Updates current content, retains prior versions and human Notes |
+| `archive_memory` | `id`, `expected_revision`, `reason` | Excludes the record from normal recall without deleting or moving it |
 | `vault_context` | None | PARA folder counts, `AGENTS.md` content if present, ownership/privacy guidance, Inbox status |
 | `list_notes` | Optional `category`, `query`, `offset`, `limit` | Metadata, revisions, total, next offset; literal case-insensitive path/content search |
 | `read_note` | `path` | Content, revision, author, category, parse error if any |
 | `create_note` | `filename`, `title`, `body` | Creates an AI note in Inbox; returns changed paths and new revisions |
-| `update_ai_note` | `path`, `expected_revision`, `content` | Replaces AI body; preserves frontmatter and human Notes |
+| `update_ai_note` | `path`, `expected_revision`, `content` | Replaces ordinary AI body; memory records require `update_memory` |
 | `comment_note` | `path`, `expected_revision`, `content` | Appends to a human note's marked trailing AI section |
 | `set_ai_section` | `path`, `expected_revision`, `content` | Replaces only that AI section's content |
 | `inbox_status` | None | Capture count, oldest modification time, reminder configuration and due status |
@@ -37,6 +41,42 @@ counts exclude files named after their containing folder.
 It includes frontmatter, whitespace, line endings, and protected sections.
 Pass it back exactly as `expected_revision`. If any content changed, read again
 and reconsider the edit. A revision is a concurrency check, not authorization.
+
+### Durable memory
+
+Memory types are `preference`, `fact`, `decision`, and `procedure`. `basis` is
+required and is one of `user_stated`, `observed`, or `inferred`; it is a statement
+by the caller, not a server-verified confidence score. `source` is a nonempty
+description or reference. Never invent a source.
+
+`scope` is `global` by default, or `project:<stable-name>`. Project names may
+contain letters, digits, dots, underscores, and hyphens, up to 120 characters.
+Use a provider-independent name, not a machine path. Recall for a project
+includes global memories as well. `scope: "*"` explicitly searches all scopes;
+it is accepted only by `recall`. Scoping selects relevance, not permissions.
+
+`recall.limit` defaults to 20 and accepts 1–100. Ranking counts shared words
+between the query and the current title/content. History is excluded. An empty
+query lists memories in scope. The response wraps each record as
+`{"score": 2, "memory": {...}}` and returns `total`, `next_offset`, and `warnings`.
+Malformed records are reported in warnings; duplicate IDs stop retrieval rather
+than silently selecting a record.
+
+`review_after` is an optional UTC `YYYY-MM-DD` date. Recall flags `review_due`
+on and after that date. Due memories remain visible so the assistant can ask
+for verification; they do not become automatically false or archived.
+
+`update_memory` retains an omitted review date and preserves type, scope, title,
+and ID. It appends the old content/provenance and the correction reason to
+`## History`. Archived records stay archived unless `reactivate: true` is
+explicitly supplied. A record physically inside `4 Archive` is excluded from
+normal recall regardless of metadata and must be moved out by the human before
+reactivation.
+
+`archive_memory` is logical retirement. It records the reason in metadata and
+history, retaining the note and its versions. It does not apply a PARA move or
+erase data from Git history, client transcripts, or backups. The
+[memory guide](memory.md) explains the workflow and portable format.
 
 ### New notes
 

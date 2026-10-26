@@ -28,6 +28,7 @@ The author identity in package metadata is intentionally public.
 | File | Responsibility |
 | --- | --- |
 | `src/note.rs` | Ownership, frontmatter, Markdown sections, revisions |
+| `src/memory.rs` | Portable memory records, scope, provenance, history, recall, retirement |
 | `src/vault.rs` | Paths, reads/search, locking, writes, indexes, recovery journals |
 | `src/review.rs` | Inbox hints, proposed moves, reminder state |
 | `src/git.rs` | Separate human/AI checkpoints and backup pushes |
