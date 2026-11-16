@@ -35,7 +35,7 @@ pub struct SearchNotes {
     pub query: String,
     pub category: Option<String>,
     pub offset: Option<usize>,
-    /// 1–100, default 20. Whole-word OR search, ranked by distinct query words.
+    /// 1–100, default 20. OR search over English/French stems, BM25 ranking.
     pub limit: Option<usize>,
 }
 
@@ -146,7 +146,7 @@ impl Brain {
     }
 
     #[tool(
-        description = "Search the local full-text index of Markdown paths and contents with whole-word OR matching and ranked results. Hashes files on each query to detect external edits; cache is rebuildable. Includes ordinary references and memory history: use recall for current memory facts. Returns metadata; read_note retrieves full text.",
+        description = "Search the local full-text index of Markdown paths and contents with OR matching over English and French word stems, ranked by BM25. Hashes files on each query to detect external edits; cache is rebuildable. Includes ordinary references and memory history: use recall for current memory facts. Returns metadata; read_note retrieves full text.",
         annotations(read_only_hint = true, open_world_hint = false)
     )]
     async fn search_notes(&self, Parameters(p): Parameters<SearchNotes>) -> CallToolResult {

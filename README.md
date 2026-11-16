@@ -151,7 +151,7 @@ settings, outside public repositories.
 | Workflow | Tools and behavior |
 | --- | --- |
 | Share durable memory | `remember`, `recall`, `update_memory`, `archive_memory`; global/project scopes, provenance, and version history |
-| Find existing knowledge | `search_notes`, `list_notes`, `read_note`; indexed word search, literal search, PARA filters, and bounded recall |
+| Find existing knowledge | `search_notes`, `list_notes`, `read_note`; indexed search with English/French stemming and BM25 ranking, literal search, PARA filters, and bounded recall |
 | Keep memory current | `memory_review` flags overdue records, changed sources, and possible overlaps or conflicts for review |
 | Capture and enrich notes | New AI notes land in Inbox; human notes accept suggestions in a marked AI section |
 | Consolidate your Inbox | Counts, review hints, and proposed moves with reasons; you inspect and approve the exact changes locally |

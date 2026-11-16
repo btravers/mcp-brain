@@ -6,22 +6,74 @@ use crate::{
     vault::{Vault, category},
 };
 use anyhow::{Result, ensure};
+use rust_stemmers::{Algorithm, Stemmer};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::LazyLock;
 
-pub(crate) fn words(text: &str) -> BTreeSet<String> {
+const VERSION: u32 = 2;
+// Standard BM25 parameters.
+const K1: f64 = 1.2;
+const B: f64 = 0.75;
+// Vaults mix English and French; a token is indexed under both stems.
+static STEMMERS: LazyLock<[Stemmer; 2]> = LazyLock::new(|| {
+    [
+        Stemmer::create(Algorithm::English),
+        Stemmer::create(Algorithm::French),
+    ]
+});
+
+fn tokens(text: &str) -> Vec<String> {
     text.to_lowercase()
         .split(|c: char| !c.is_alphanumeric())
         .filter(|s| !s.is_empty())
         .map(str::to_owned)
         .collect()
 }
+pub(crate) fn words(text: &str) -> BTreeSet<String> {
+    tokens(text).into_iter().collect()
+}
+fn stems(token: &str) -> BTreeSet<String> {
+    STEMMERS
+        .iter()
+        .map(|s| s.stem(token).into_owned())
+        .collect()
+}
+pub(crate) fn round(score: f64) -> f64 {
+    (score * 1000.0).round() / 1000.0
+}
+/// Stem counts and token length of one indexed field.
+#[derive(Serialize, Deserialize)]
+pub(crate) struct Terms {
+    counts: BTreeMap<String, u32>,
+    length: u32,
+}
+impl Terms {
+    fn of(text: &str) -> Self {
+        let tokens = tokens(text);
+        let mut per_token = BTreeMap::<&str, u32>::new();
+        for t in &tokens {
+            *per_token.entry(t).or_default() += 1;
+        }
+        let mut counts = BTreeMap::new();
+        for (token, n) in per_token {
+            for stem in stems(token) {
+                *counts.entry(stem).or_default() += n;
+            }
+        }
+        Terms {
+            counts,
+            length: tokens.len() as u32,
+        }
+    }
+}
 #[derive(Serialize, Deserialize)]
 pub(crate) struct Document {
     pub revision: String,
     pub title: Option<String>,
-    pub words: BTreeSet<String>,
+    terms: Terms,
+    memory_terms: Option<Terms>,
     pub memory: Option<Memory>,
     pub warning: Option<String>,
 }
@@ -33,18 +85,39 @@ pub(crate) struct Index {
     memory_postings: BTreeMap<String, BTreeSet<String>>,
 }
 impl Index {
-    pub(crate) fn scores(&self, query: &str, memory_only: bool) -> BTreeMap<String, usize> {
-        let mut scores = BTreeMap::new();
-        let postings = if memory_only {
-            &self.memory_postings
+    /// BM25 with OR semantics. A query word scores its best-matching stem,
+    /// so the English and French variants of one word never count twice.
+    pub(crate) fn scores(&self, query: &str, memory_only: bool) -> BTreeMap<String, f64> {
+        let (postings, field): (_, fn(&Document) -> Option<&Terms>) = if memory_only {
+            (&self.memory_postings, |d| d.memory_terms.as_ref())
         } else {
-            &self.postings
+            (&self.postings, |d| Some(&d.terms))
         };
+        let fields: Vec<_> = self.documents.values().filter_map(field).collect();
+        let n = fields.len() as f64;
+        let average = fields.iter().map(|t| t.length as f64).sum::<f64>() / n.max(1.0);
+        let mut scores = BTreeMap::new();
         for word in words(query) {
-            if let Some(paths) = postings.get(&word) {
+            let mut best = BTreeMap::<&String, f64>::new();
+            for stem in stems(&word) {
+                let Some(paths) = postings.get(&stem) else {
+                    continue;
+                };
+                let df = paths.len() as f64;
+                let idf = (1.0 + (n - df + 0.5) / (df + 0.5)).ln();
                 for path in paths {
-                    *scores.entry(path.clone()).or_default() += 1;
+                    let Some(t) = self.documents.get(path).and_then(field) else {
+                        continue;
+                    };
+                    let f = t.counts.get(&stem).copied().unwrap_or_default() as f64;
+                    let norm = K1 * (1.0 - B + B * t.length as f64 / average.max(1.0));
+                    let score = idf * f * (K1 + 1.0) / (f + norm);
+                    let entry = best.entry(path).or_default();
+                    *entry = entry.max(score);
                 }
+            }
+            for (path, score) in best {
+                *scores.entry(path.clone()).or_default() += score;
             }
         }
         scores
@@ -60,13 +133,13 @@ impl Vault {
         let mut index: Index = cached
             .as_deref()
             .and_then(|s| serde_json::from_str(s).ok())
-            .filter(|i: &Index| i.version == 1)
+            .filter(|i: &Index| i.version == VERSION)
             .unwrap_or_default();
         let paths = self.paths()?;
         let live: BTreeSet<_> = paths.iter().cloned().collect();
         let old_len = index.documents.len();
         index.documents.retain(|p, _| live.contains(p));
-        let mut changed = rebuild || index.version != 1 || index.documents.len() != old_len;
+        let mut changed = rebuild || index.version != VERSION || index.documents.len() != old_len;
         for path in paths {
             let text = self.read_text(&path)?;
             let revision = note::revision(&text);
@@ -98,32 +171,33 @@ impl Vault {
                 Document {
                     revision,
                     title,
-                    words: words(&format!("{path} {text}")),
+                    terms: Terms::of(&format!("{path} {text}")),
+                    memory_terms: memory
+                        .as_ref()
+                        .map(|m| Terms::of(&format!("{} {}", m.title, m.content))),
                     memory,
                     warning,
                 },
             );
         }
         if changed {
-            index.version = 1;
+            index.version = VERSION;
             index.postings.clear();
             index.memory_postings.clear();
             for (path, doc) in &index.documents {
-                for word in &doc.words {
+                for stem in doc.terms.counts.keys() {
                     index
                         .postings
-                        .entry(word.clone())
+                        .entry(stem.clone())
                         .or_default()
                         .insert(path.clone());
                 }
-                if let Some(m) = &doc.memory {
-                    for word in words(&format!("{} {}", m.title, m.content)) {
-                        index
-                            .memory_postings
-                            .entry(word)
-                            .or_default()
-                            .insert(path.clone());
-                    }
+                for stem in doc.memory_terms.iter().flat_map(|t| t.counts.keys()) {
+                    index
+                        .memory_postings
+                        .entry(stem.clone())
+                        .or_default()
+                        .insert(path.clone());
                 }
             }
             self.write_state("search-index.json", &serde_json::to_string(&index)?)?;
@@ -164,14 +238,14 @@ impl Vault {
             .into_iter()
             .filter(|(p, _)| area.is_none_or(|a| category(p) == Some(a)))
             .collect();
-        ranked.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+        ranked.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
         let total = ranked.len();
         let notes: Vec<_>=ranked.into_iter().skip(offset).take(limit).map(|(path,score)| {
             let d=&index.documents[&path];
-            json!({"path":path,"revision":d.revision,"title":d.title,"score":score,"parse_error":d.warning})
+            json!({"path":path,"revision":d.revision,"title":d.title,"score":round(score),"parse_error":d.warning})
         }).collect();
         Ok(
-            json!({"total":total,"notes":notes,"next_offset":if offset.saturating_add(limit)<total {Some(offset+limit)}else{None},"ranking":"Distinct query words matched, OR semantics, Unicode lowercase; no stemming or semantic inference."}),
+            json!({"total":total,"notes":notes,"next_offset":if offset.saturating_add(limit)<total {Some(offset+limit)}else{None},"ranking":"BM25 over English and French stems of Unicode-lowercase words, OR semantics; no semantic inference."}),
         )
     }
 }

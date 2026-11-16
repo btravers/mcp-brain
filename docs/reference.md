@@ -28,7 +28,7 @@ relative to the configured vault. Pagination offsets are zero-based.
 | `inbox_plan_review` | `id` | Read-only human decisions and precision comments from a local review; cannot approve or edit decisions |
 | `sync_status` | None | Last successful sync/error, cached ahead/behind counts, local policy, pending pushes and journals; no network |
 | `sync_vault` | None | Explicit fetch, fast-forward, push; refuses dirty trees, divergence, and incomplete transactions |
-| `search_notes` | `query`; optional `category`, `offset`, `limit` | Indexed full-text word search; ranked metadata and revisions |
+| `search_notes` | `query`; optional `category`, `offset`, `limit` | Indexed full-text search with English/French stemming and BM25 ranking; metadata and revisions |
 | `memory_review` | Optional `offset`, `limit` | Overdue, changed/unavailable sources, lexical duplicate/conflict candidates; no note changes |
 
 `list_notes.limit` defaults to 50 and accepts 1–200. `inbox_review.limit`
@@ -60,10 +60,10 @@ Use a provider-independent name, not a machine path. Recall for a project
 includes global memories as well. `scope: "*"` explicitly searches all scopes;
 it is accepted only by `recall`. Scoping selects relevance, not permissions.
 
-`recall.limit` defaults to 20 and accepts 1–100. Ranking counts shared words
-between the query and the current title/content. History is excluded. An empty
-query lists memories in scope. The response wraps each record as
-`{"score": 2, "memory": {...}}` and returns `total`, `next_offset`, and `warnings`.
+`recall.limit` defaults to 20 and accepts 1–100. Ranking uses BM25 between the
+query and the current title/content, as described for `search_notes`. History is
+excluded. An empty query lists memories in scope. The response wraps each record as
+`{"score": 1.234, "memory": {...}}` and returns `total`, `next_offset`, and `warnings`.
 Malformed records are reported in warnings; duplicate IDs stop retrieval rather
 than silently selecting a record.
 
@@ -76,8 +76,11 @@ Read that note or increase the budget. `next_offset` counts records actually
 returned, including references, so callers can continue without skipping records.
 
 `search_notes` uses a local inverted index, Unicode lowercase word tokenization,
-and OR matching. Scores count distinct matched query words; ties sort by path.
-It has no stemming or semantic search. `limit` accepts 1–100, default 20.
+and OR matching. Each word is indexed under its English and French Snowball
+stems, so `runs` finds `running` and `décision` finds `décisions`. Scores are
+BM25: rare words weigh more than common ones, and a query word counts once even
+when both stems match. Ties sort by path. Accents are not folded (`cafe` may not match
+`café`), and there is no semantic search. `limit` accepts 1–100, default 20.
 Every query reads and hashes current files to notice external changes; unchanged
 records reuse cached parsing and postings. `list_notes` retains its literal
 substring behavior. `index rebuild` regenerates the cache; invalid JSON or a

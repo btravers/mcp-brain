@@ -121,12 +121,13 @@ be made cooperative merely by installing this server.
 
 ## Retrieval and review
 
-The local index stores word postings, metadata, and parsed memories. Every query
-hashes the current Markdown files; only changed records are reparsed. Thus search
-avoids repeatedly parsing and searching all text, but still reads the vault to
-notice external edits. The index is rebuildable and contains private information.
-It is neither an embedding store nor a database service. Unicode lowercase word
-matching has no stemming, language model, or semantic truth assessment.
+The local index stores stem postings and counts, metadata, and parsed memories.
+Every query hashes the current Markdown files; only changed records are reparsed.
+Thus search avoids repeatedly parsing and searching all text, but still reads the
+vault to notice external edits. The index is rebuildable and contains private
+information. It is neither an embedding store nor a database service. Words are
+stemmed with both English and French Snowball rules, because vaults often mix the
+two, and ranked with BM25. There is no language model or semantic truth assessment.
 
 Recall limits the serialized `memories` array by characters, not model tokens.
 An oversized record becomes an explicit reference instead of a silently cut
