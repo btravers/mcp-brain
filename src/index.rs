@@ -41,7 +41,7 @@ fn stems(token: &str) -> BTreeSet<String> {
         .collect()
 }
 pub(crate) fn round(score: f64) -> f64 {
-    (score * 1000.0).round() / 1000.0
+    (score * 10_000.0).round() / 10_000.0
 }
 /// Stem counts and token length of one indexed field.
 #[derive(Serialize, Deserialize)]
@@ -213,9 +213,19 @@ impl Vault {
         Ok(index)
     }
     pub fn rebuild_index(&self) -> Result<Value> {
-        let _lock = self.lock()?;
-        let index = self.index(true)?;
-        Ok(json!({"documents":index.documents.len(),"terms":index.postings.len(),"rebuilt":true}))
+        let index = {
+            let _lock = self.lock()?;
+            self.index(true)?
+        };
+        // Embedding can take minutes; it only touches the vector cache, so
+        // writers are not blocked meanwhile.
+        let semantic = match self.semantic(&index, None)? {
+            Ok(_) => format!("All notes embedded with {}.", crate::semantic::MODEL),
+            Err(reason) => reason,
+        };
+        Ok(
+            json!({"documents":index.documents.len(),"terms":index.postings.len(),"rebuilt":true,"semantic":semantic}),
+        )
     }
     pub fn search_notes(
         &self,
@@ -233,19 +243,37 @@ impl Vault {
             );
         }
         let index = self.index(false)?;
+        let in_area = |p: &str| area.is_none_or(|a| category(p) == Some(a));
         let mut ranked: Vec<_> = index
             .scores(query, false)
             .into_iter()
-            .filter(|(p, _)| area.is_none_or(|a| category(p) == Some(a)))
+            .filter(|(p, _)| in_area(p))
             .collect();
         ranked.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+        let mut similarity = BTreeMap::new();
+        let ranking = match self.semantic(&index, Some(crate::semantic::INLINE_BUDGET))? {
+            Ok(semantic) => {
+                let near = semantic.nearest(&semantic.query(query)?, false, in_area);
+                let lexical = ranked.into_iter().map(|(p, _)| p).collect();
+                let meaning = near.iter().map(|(p, _)| p.clone()).collect();
+                ranked = crate::semantic::fuse(&[lexical, meaning]);
+                similarity.extend(near);
+                format!(
+                    "Hybrid: reciprocal rank fusion of BM25 (English/French stems) and {} section similarity.",
+                    crate::semantic::MODEL
+                )
+            }
+            Err(reason) => format!(
+                "BM25 over English and French stems of Unicode-lowercase words, OR semantics. {reason}"
+            ),
+        };
         let total = ranked.len();
         let notes: Vec<_>=ranked.into_iter().skip(offset).take(limit).map(|(path,score)| {
             let d=&index.documents[&path];
-            json!({"path":path,"revision":d.revision,"title":d.title,"score":round(score),"parse_error":d.warning})
+            json!({"path":path,"revision":d.revision,"title":d.title,"score":round(score),"similarity":similarity.get(&path).map(|s| round(f64::from(*s))),"parse_error":d.warning})
         }).collect();
         Ok(
-            json!({"total":total,"notes":notes,"next_offset":if offset.saturating_add(limit)<total {Some(offset+limit)}else{None},"ranking":"BM25 over English and French stems of Unicode-lowercase words, OR semantics; no semantic inference."}),
+            json!({"total":total,"notes":notes,"next_offset":if offset.saturating_add(limit)<total {Some(offset+limit)}else{None},"ranking":ranking}),
         )
     }
 }

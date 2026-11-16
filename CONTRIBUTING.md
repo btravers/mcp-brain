@@ -23,6 +23,17 @@ tests against a contributor's actual vault. Keep personal paths, private notes,
 tokens, client identifiers, and transcripts out of fixtures and issue reports.
 The author identity in package metadata is intentionally public.
 
+Semantic tests that need the real model are ignored by default and do not run
+in CI. After changing chunking, pooling, or similarity floors, download the
+pinned files (see `src/semantic.rs`) and run:
+
+```sh
+MCP_BRAIN_TEST_MODEL_DIR=/path/to/files cargo test --release --test semantic -- --ignored --nocapture
+```
+
+The printed similarities are the evidence for the floors; update the comments
+next to them when they move.
+
 ## Code map
 
 | File | Responsibility |
@@ -33,7 +44,8 @@ The author identity in package metadata is intentionally public.
 | `src/review.rs` | Inbox hints, proposed moves, reminder state |
 | `src/git.rs` | Exact AI snapshots, human checkpoints, fast-forward sync, bounded Git subprocesses |
 | `src/operations.rs` | Local policy, coordinator workflows, watching, recovery, setup diagnostics |
-| `src/index.rs` | Rebuildable word postings and content-hash invalidation |
+| `src/index.rs` | Rebuildable stem postings, BM25, and content-hash invalidation |
+| `src/semantic.rs` | Optional local embeddings: model install, sections, vector cache, fusion |
 | `src/server.rs` | Typed MCP tools and initialization instructions |
 | `src/main.rs` | Local CLI and human approval boundary |
 | `src/terminal.rs` | Human-readable views and resumable, line-oriented review |

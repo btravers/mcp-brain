@@ -375,6 +375,10 @@ impl Vault {
     }
 
     pub fn write_state(&self, filename: &str, content: &str) -> Result<()> {
+        self.write_state_bytes(filename, content.as_bytes())
+    }
+
+    pub fn write_state_bytes(&self, filename: &str, content: &[u8]) -> Result<()> {
         valid_relative(filename)?;
         ensure!(
             !filename.contains('/'),
@@ -385,13 +389,19 @@ impl Vault {
             reject_alias(&meta)?;
         }
         let mut file = tempfile::NamedTempFile::new_in(&self.state)?;
-        file.write_all(content.as_bytes())?;
+        file.write_all(content)?;
         file.as_file().sync_all()?;
         file.persist(path).map_err(|e| e.error)?;
         Ok(())
     }
 
     pub fn read_state(&self, filename: &str) -> Result<Option<String>> {
+        self.read_state_bytes(filename)?
+            .map(|b| String::from_utf8(b).map_err(Into::into))
+            .transpose()
+    }
+
+    pub fn read_state_bytes(&self, filename: &str) -> Result<Option<Vec<u8>>> {
         valid_relative(filename)?;
         ensure!(
             !filename.contains('/'),
@@ -401,7 +411,7 @@ impl Vault {
         match fs::symlink_metadata(&path) {
             Ok(meta) => {
                 reject_alias(&meta)?;
-                Ok(Some(fs::read_to_string(path)?))
+                Ok(Some(fs::read(path)?))
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(e) => Err(e.into()),

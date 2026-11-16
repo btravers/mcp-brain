@@ -23,13 +23,13 @@ relative to the configured vault. Pagination offsets are zero-based.
 | `comment_note` | `path`, `expected_revision`, `content` | Appends to a human note's marked trailing AI section |
 | `set_ai_section` | `path`, `expected_revision`, `content` | Replaces only that AI section's content |
 | `inbox_status` | None | Capture count, oldest modification time, reminder configuration and due status |
-| `inbox_review` | Optional `offset`, `limit` | Previews, lexical folder matches, review questions, status |
+| `inbox_review` | Optional `offset`, `limit` | Previews, lexical folder matches, similar notes by meaning, review questions, status |
 | `propose_inbox_plan` | `moves` | Saves a local plan; returns ID, move descriptions, changed paths, expiry, approval command |
 | `inbox_plan_review` | `id` | Read-only human decisions and precision comments from a local review; cannot approve or edit decisions |
 | `sync_status` | None | Last successful sync/error, cached ahead/behind counts, local policy, pending pushes and journals; no network |
 | `sync_vault` | None | Explicit fetch, fast-forward, push; refuses dirty trees, divergence, and incomplete transactions |
-| `search_notes` | `query`; optional `category`, `offset`, `limit` | Indexed full-text search with English/French stemming and BM25 ranking; metadata and revisions |
-| `memory_review` | Optional `offset`, `limit` | Overdue, changed/unavailable sources, lexical duplicate/conflict candidates; no note changes |
+| `search_notes` | `query`; optional `category`, `offset`, `limit` | BM25 search with English/French stemming, fused with meaning when the model is installed; metadata and revisions |
+| `memory_review` | Optional `offset`, `limit` | Overdue, changed/unavailable sources, duplicate/conflict candidates by words or meaning; no note changes |
 
 `list_notes.limit` defaults to 50 and accepts 1–200. `inbox_review.limit`
 defaults to 20 and accepts 1–50. Review previews contain at most 1,200 characters;
@@ -61,9 +61,11 @@ includes global memories as well. `scope: "*"` explicitly searches all scopes;
 it is accepted only by `recall`. Scoping selects relevance, not permissions.
 
 `recall.limit` defaults to 20 and accepts 1–100. Ranking uses BM25 between the
-query and the current title/content, as described for `search_notes`. History is
+query and the current title/content, as described for `search_notes`; with the
+model installed it fuses the closest memory statements by meaning. History is
 excluded. An empty query lists memories in scope. The response wraps each record as
-`{"score": 1.234, "memory": {...}}` and returns `total`, `next_offset`, and `warnings`.
+`{"score": 1.234, "similarity": 0.83, "memory": {...}}` and returns `total`,
+`next_offset`, `ranking`, and `warnings`. `similarity` is null without a semantic match.
 Malformed records are reported in warnings; duplicate IDs stop retrieval rather
 than silently selecting a record.
 
@@ -80,11 +82,22 @@ and OR matching. Each word is indexed under its English and French Snowball
 stems, so `runs` finds `running` and `décision` finds `décisions`. Scores are
 BM25: rare words weigh more than common ones, and a query word counts once even
 when both stems match. Ties sort by path. Accents are not folded (`cafe` may not match
-`café`), and there is no semantic search. `limit` accepts 1–100, default 20.
+`café`). `limit` accepts 1–100, default 20.
+
+With the [semantic model](setup.md#enable-semantic-search) installed, results are
+a reciprocal rank fusion (k = 60) of the BM25 list and up to 10 notes whose
+closest heading section clears a similarity floor of 0.80. `score` is then the
+fused score and `similarity` the best section similarity (null for lexical-only
+matches). Sections split at headings and at about 1,200 characters; heading-only
+sections are skipped. `ranking` says which mode ran and why semantic search is
+off or catching up. Similarity floors are heuristics measured on invented notes,
+not calibrated probabilities.
 Every query reads and hashes current files to notice external changes; unchanged
 records reuse cached parsing and postings. `list_notes` retains its literal
-substring behavior. `index rebuild` regenerates the cache; invalid JSON or a
-cache version mismatch triggers an automatic rebuild on the next indexed query.
+substring behavior. `index rebuild` regenerates the cache and embeds notes that
+lack vectors; invalid JSON or a cache version mismatch triggers an automatic
+rebuild on the next indexed query. Vectors live in `embeddings.bin` in the state
+directory, keyed by note revision.
 
 `source_notes` accepts up to 20 exact vault-relative Markdown paths. On capture,
 their revisions are stored as `source_snapshots` in the memory frontmatter.
@@ -94,10 +107,11 @@ required. Renamed paths are reported as unavailable until explicitly updated.
 
 `memory_review.limit` accepts 1–100, default 20. Findings include exact memory
 revisions for subsequent update/archive decisions. Identical statements are
-`duplicate_candidate`; same-title records or word-set similarity of at least
-0.8 are `possible_conflict_or_overlap`. Different project scopes are compared
-only through a global memory. This is a lexical heuristic, not proof of a
-contradiction. Pair comparisons are quadratic in the number of active memories;
+`duplicate_candidate`; same-title records, word-set similarity of at least
+0.8, or (with the model) statement similarity of at least 0.845 are
+`possible_conflict_or_overlap`, reported as `word_similarity` and
+`semantic_similarity`. Different project scopes are compared only through a
+global memory. These are heuristics, not proof of a contradiction. Pair comparisons are quadratic in the number of active memories;
 large memory collections may need a more selective strategy in a future version.
 Review itself never changes a memory or approves a proposed decision.
 
@@ -183,6 +197,7 @@ recover push
 recover show JOURNAL_FILENAME
 recover finish JOURNAL_FILENAME
 index rebuild
+model install [--from DIR]
 search QUERY [--category CATEGORY] [--offset N] [--limit N]
 memory-review [--offset N] [--limit N]
 inbox status
@@ -273,7 +288,8 @@ you remove them yourself. Moving a vault changes its default state ID.
   conflicts with Obsidian wikilinks.
 - Invalid or unreadable files can make a scan fail rather than silently omit
   content. Unsafe paths are omitted from listings.
-- No embeddings, external model calls, network listener, attachments, arbitrary
-  file writes, deletes, or arbitrary shell tools.
+- No external model calls, network listener, attachments, arbitrary file
+  writes, deletes, or arbitrary shell tools. The optional embedding model runs
+  locally; `model install` is the only command that downloads it.
 - Git commands may contact the vault's configured backup; all other note
   operations are local.

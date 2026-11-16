@@ -77,12 +77,17 @@ enum Command {
         #[command(subcommand)]
         command: RecoveryCommand,
     },
-    /// Rebuild the private local full-text index from Markdown.
+    /// Rebuild the private local search index from Markdown.
     Index {
         #[command(subcommand)]
         command: IndexCommand,
     },
-    /// Search words in note paths and full content, ranked by distinct matches.
+    /// Install the optional local model that enables semantic search.
+    Model {
+        #[command(subcommand)]
+        command: ModelCommand,
+    },
+    /// Search note paths and content: BM25, fused with meaning when the model is installed.
     Search {
         query: String,
         #[arg(long)]
@@ -113,7 +118,18 @@ enum Command {
 
 #[derive(Subcommand)]
 enum IndexCommand {
+    /// Rebuild the word index and embed notes that lack vectors.
     Rebuild,
+}
+
+#[derive(Subcommand)]
+enum ModelCommand {
+    /// Download the pinned model (about 490 MB) with curl and verify its SHA-256.
+    Install {
+        /// Copy the files from this directory instead of downloading them.
+        #[arg(long)]
+        from: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -323,6 +339,9 @@ async fn main() -> Result<()> {
         Command::Index {
             command: IndexCommand::Rebuild,
         } => emit!(vault.rebuild_index()?),
+        Command::Model {
+            command: ModelCommand::Install { from },
+        } => emit!(vault.install_model(from.as_deref())?),
         Command::Search {
             query,
             category,

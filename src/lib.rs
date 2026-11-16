@@ -5,6 +5,7 @@ pub mod note;
 pub mod operations;
 pub mod plans;
 pub mod review;
+pub mod semantic;
 pub mod server;
 pub mod undo;
 pub mod vault;

@@ -164,6 +164,10 @@ impl Vault {
             .filter(|p| matches!(category(p), Some("projects" | "areas" | "resources")))
             .filter_map(|p| p.rsplit_once('/').map(|(d, _)| d.to_owned()))
             .collect();
+        let index = self.index(false)?;
+        let semantic = self
+            .semantic(&index, Some(crate::semantic::INLINE_BUDGET))?
+            .ok();
         let mut items = Vec::new();
         for path in inbox.iter().skip(offset).take(limit) {
             let text = self.read_text(path)?;
@@ -179,8 +183,9 @@ impl Vault {
             candidates.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(b.1)));
             items.push(json!({"path":path,"revision":note::revision(&text),"preview":text.chars().take(1200).collect::<String>(),
                 "related_folders":candidates.into_iter().take(5).map(|(score,folder)|json!({"folder":folder,"shared_words":score})).collect::<Vec<_>>(),
+                "similar_notes":semantic.as_ref().map(|s| s.similar(path, |p| category(p) != Some("inbox")).into_iter().take(3).map(|(p,sim)| json!({"path":p,"similarity":crate::index::round(f64::from(sim))})).collect::<Vec<_>>()),
                 "questions":["Does this support a goal with an end date?","Is this an ongoing responsibility?","Is this reference material, or is it no longer relevant?"],
-                "guidance":"Folder matches are lexical hints, not classification decisions. Read the complete note, propose destination + reason, and ask once for the batch. Ask when two categories fit."}));
+                "guidance":"Folder matches are lexical hints, not classification decisions. similar_notes (null when semantic search is off) are notes close in meaning: candidates to merge with or link to, never automatic. Read the complete note, propose destination + reason, and ask once for the batch. Ask when two categories fit."}));
         }
         Ok(
             json!({"total":inbox.len(),"items":items,"next_offset":if offset.saturating_add(limit)<inbox.len(){Some(offset+limit)}else{None},"status":self.inbox_status()?}),
