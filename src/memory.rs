@@ -347,12 +347,12 @@ impl Vault {
             }
             let text = format!("{} {}", memory.title, memory.content).to_lowercase();
             let score = scores.get(&memory.path).copied().unwrap_or_default();
-            if !query.trim().is_empty() && score == 0 && !text.contains(&query) {
+            if !query.trim().is_empty() && score == 0.0 && !text.contains(&query) {
                 continue;
             }
-            ranked.push((score, memory));
+            ranked.push((crate::index::round(score), memory));
         }
-        ranked.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.id.cmp(&b.1.id)));
+        ranked.sort_by(|a, b| b.0.total_cmp(&a.0).then_with(|| a.1.id.cmp(&b.1.id)));
         let total = ranked.len();
         let offset = args.offset.unwrap_or(0);
         let budget = args.max_chars.unwrap_or(16_000);

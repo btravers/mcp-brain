@@ -294,14 +294,37 @@ fn search_index_detects_external_edits_deletes_and_recovers_corruption() {
     assert_eq!(v.search_notes("oldtoken", None, 0, 20).unwrap()["total"], 1);
     fs::write(v.root.join("Example.md"), "# Example\nNewtoken café\n").unwrap();
     assert_eq!(v.search_notes("oldtoken", None, 0, 20).unwrap()["total"], 0);
-    assert_eq!(
-        v.search_notes("CAFÉ newtoken", None, 0, 20).unwrap()["notes"][0]["score"],
-        2
-    );
+    let both = &v.search_notes("CAFÉ newtoken", None, 0, 20).unwrap()["notes"][0]["score"];
+    let one = &v.search_notes("newtoken", None, 0, 20).unwrap()["notes"][0]["score"];
+    assert!(both.as_f64().unwrap() > one.as_f64().unwrap());
     v.write_state("search-index.json", "corrupt cache").unwrap();
     assert_eq!(v.search_notes("newtoken", None, 0, 20).unwrap()["total"], 1);
     fs::remove_file(v.root.join("Example.md")).unwrap();
     assert_eq!(v.search_notes("newtoken", None, 0, 20).unwrap()["total"], 0);
+}
+
+#[test]
+fn search_stems_english_and_french_and_ranks_with_bm25() {
+    let (_temp, v) = fixture();
+    fs::write(
+        v.root.join("Running.md"),
+        "# Notes\nShe was running tests.\n",
+    )
+    .unwrap();
+    fs::write(
+        v.root.join("Decisions.md"),
+        "# Réunion\nLes décisions importantes.\n",
+    )
+    .unwrap();
+    fs::write(v.root.join("Rare.md"), "# Rare\nzebra common common\n").unwrap();
+    fs::write(v.root.join("Common.md"), "# Common\ncommon common common\n").unwrap();
+    let top = |q: &str| v.search_notes(q, None, 0, 20).unwrap()["notes"][0]["path"].clone();
+    assert_eq!(top("runs"), "Running.md");
+    assert_eq!(top("décision"), "Decisions.md");
+    // The rare word outweighs repeated common ones.
+    assert_eq!(top("zebra common"), "Rare.md");
+    // Repetition still counts for a single word.
+    assert_eq!(top("common"), "Common.md");
 }
 
 #[test]
