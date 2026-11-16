@@ -1,6 +1,6 @@
 # Contributing
 
-Use Rust 1.93 or newer. Clone with SSH:
+Use Rust 1.94 or newer. Clone with SSH:
 
 ```sh
 git clone git@github.com:btravers/mcp-brain.git

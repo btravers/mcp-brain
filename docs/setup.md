@@ -38,7 +38,7 @@ working authentication, and a configured upstream.
 
 ## Build from source
 
-Install Rust 1.93 or newer with your preferred Rust distribution, then:
+Install Rust 1.94 or newer with your preferred Rust distribution, then:
 
 ```sh
 git clone git@github.com:btravers/mcp-brain.git

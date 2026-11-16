@@ -31,14 +31,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust
-        run: rustup toolchain install 1.93.0 --profile minimal --target ${{ matrix.target }}
+        run: rustup toolchain install 1.94.0 --profile minimal --target ${{ matrix.target }}
       - name: Install musl
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y musl-tools
       - name: Test target
-        run: cargo +1.93.0 test --locked --target ${{ matrix.target }}
+        run: cargo +1.94.0 test --locked --target ${{ matrix.target }}
       - name: Build release
-        run: cargo +1.93.0 build --locked --release --target ${{ matrix.target }}
+        run: cargo +1.94.0 build --locked --release --target ${{ matrix.target }}
       - name: Package Unix
         if: runner.os != 'Windows'
         shell: bash
