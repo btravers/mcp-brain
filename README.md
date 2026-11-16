@@ -35,7 +35,10 @@ extract it, and put `mcp-brain` on your `PATH` or use its absolute path.
 mcp-brain --version
 ```
 
-Linux binaries use musl; Windows binaries include their compiler runtime.
+Linux binaries use musl; Windows binaries include their compiler runtime. The
+Linux ARM64 binary needs an ARMv8.2-A CPU or later with FP16, such as AWS
+Graviton 2+, Ampere, or Raspberry Pi 5; Raspberry Pi 4 and older ARM chips
+are not supported.
 macOS binaries are not notarized. Intel macOS and Windows ARM64 builds are not
 currently provided. Downloads live under [Releases](https://github.com/btravers/mcp-brain/releases).
 
