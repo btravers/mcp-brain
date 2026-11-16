@@ -9,6 +9,7 @@ model rereading instructions correctly.
 
 The vault remains ordinary Markdown. There is no private database format to
 export, no embedding service to operate, and no model credential in the server.
+An optional embedding model runs inside the same executable.
 Obsidian is a compatible editor, not a required runtime.
 
 ## Memory is a layer over notes
@@ -125,9 +126,22 @@ The local index stores stem postings and counts, metadata, and parsed memories.
 Every query hashes the current Markdown files; only changed records are reparsed.
 Thus search avoids repeatedly parsing and searching all text, but still reads the
 vault to notice external edits. The index is rebuildable and contains private
-information. It is neither an embedding store nor a database service. Words are
-stemmed with both English and French Snowball rules, because vaults often mix the
-two, and ranked with BM25. There is no language model or semantic truth assessment.
+information. It is not a database service. Words are stemmed with both English
+and French Snowball rules, because vaults often mix the two, and ranked with BM25.
+
+Semantic search is optional and local. multilingual-e5-small runs on the CPU
+through candle, a pure-Rust inference library, so releases keep a single native
+executable with no C toolchain or runtime. The model is about 490 MB and installs
+into the state directory only when the user runs `model install`, from a pinned
+revision with checked SHA-256 digests. A vault of thousands of notes produces a
+few megabytes of vectors, so the cache is a flat file compared by brute force: no
+vector database. Re-ranking and query expansion with a language model are left
+to the calling assistant, which already reads results and can rephrase queries.
+
+Similarity floors are fixed heuristics. This model's similarities sit in a narrow
+band, so the margins between related and unrelated text are a few hundredths;
+very short queries embed generically, which is why only the ten closest notes
+vote in fusion. There is still no semantic truth assessment.
 
 Recall limits the serialized `memories` array by characters, not model tokens.
 An oversized record becomes an explicit reference instead of a silently cut
@@ -138,8 +152,8 @@ match historical text, while recall indexes current memory statements only.
 Optional source snapshots record vault-relative paths and content hashes in the
 memory's frontmatter, so changed-source review works after copying the Markdown
 to another machine. A moved source becomes unavailable until a reviewed update
-points to its new path. Review also flags overdue records and lexical overlaps
-or same-title candidates in overlapping scopes. These are proposals, not proof
+points to its new path. Review also flags overdue records and overlaps by
+words, meaning, or title in overlapping scopes. These are proposals, not proof
 of contradiction; compatible statements can share words. Review does not edit
 notes. The user and assistant decide whether to update, postpone review, or
 archive, with the reason retained by the existing memory tools.
@@ -157,7 +171,7 @@ conversation, not an automatic move.
 
 New captures always enter Inbox. This version deliberately concentrates on
 capture, retrieval, protected enrichment, and Inbox review. Folder renaming,
-whole-project archiving, custom PARA names, semantic retrieval, and general
+whole-project archiving, custom PARA names, merging notes, and general
 Obsidian link resolution are future work.
 
 ## Reminders need a delivery mechanism
@@ -172,7 +186,9 @@ MCP has no reminder-configuration tool.
 
 ## Privacy
 
-mcp-brain itself makes no model API requests and sends no telemetry. Reads and
+mcp-brain itself makes no model API requests and sends no telemetry. Only
+`model install` contacts the network on its own, to download the pinned model
+from Hugging Face. Reads and
 tool results pass to the configured MCP client, which may transmit that content
 to its model provider. Local files do not make the assistant's entire workflow
 local. Choose your client and provider accordingly.
@@ -182,7 +198,7 @@ verify whether that remote is private or appropriate for the stored material.
 Verify it before enabling writes. It does not mirror notes to the mcp-brain
 project repository or change repository visibility.
 
-Plans, recovery journals, search indexes, and tool transcripts may contain note contents. Keep
+Plans, recovery journals, search indexes, embedding vectors, and tool transcripts may contain or reveal note contents. Keep
 the state directory and client logs private. There is no semantic detector that
 can reliably tell personal data, client material, or secrets from ordinary prose.
 The server supplies guidance, but deciding what may be retained remains a human

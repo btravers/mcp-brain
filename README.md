@@ -35,12 +35,15 @@ extract it, and put `mcp-brain` on your `PATH` or use its absolute path.
 mcp-brain --version
 ```
 
-Linux binaries use musl; Windows binaries include their compiler runtime.
+Linux binaries use musl; Windows binaries include their compiler runtime. The
+Linux ARM64 binary needs an ARMv8.2-A CPU or later with FP16, such as AWS
+Graviton 2+, Ampere, or Raspberry Pi 5; Raspberry Pi 4 and older ARM chips
+are not supported.
 macOS binaries are not notarized. Intel macOS and Windows ARM64 builds are not
 currently provided. Downloads live under [Releases](https://github.com/btravers/mcp-brain/releases).
 
 <details>
-<summary>Build from source with Rust 1.93 or newer</summary>
+<summary>Build from source with Rust 1.94 or newer</summary>
 
 ```sh
 git clone git@github.com:btravers/mcp-brain.git
@@ -151,8 +154,8 @@ settings, outside public repositories.
 | Workflow | Tools and behavior |
 | --- | --- |
 | Share durable memory | `remember`, `recall`, `update_memory`, `archive_memory`; global/project scopes, provenance, and version history |
-| Find existing knowledge | `search_notes`, `list_notes`, `read_note`; indexed search with English/French stemming and BM25 ranking, literal search, PARA filters, and bounded recall |
-| Keep memory current | `memory_review` flags overdue records, changed sources, and possible overlaps or conflicts for review |
+| Find existing knowledge | `search_notes`, `list_notes`, `read_note`; BM25 search with English/French stemming, optional [local semantic search](docs/setup.md#enable-semantic-search), literal search, PARA filters, and bounded recall |
+| Keep memory current | `memory_review` flags overdue records, changed sources, and possible overlaps or conflicts for review, by words or by meaning |
 | Capture and enrich notes | New AI notes land in Inbox; human notes accept suggestions in a marked AI section |
 | Consolidate your Inbox | Counts, review hints, and proposed moves with reasons; you inspect and approve the exact changes locally |
 | Back up and synchronize | Explicit fast-forward Git sync, separate human/AI commits, pending uploads, and recovery; optional watching and offline writes |

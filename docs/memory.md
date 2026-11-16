@@ -66,7 +66,9 @@ This returns that project's memories plus global ones. Other projects are not
 included by default. Use `{"scope":"*"}` only when you intentionally want to
 search across projects. Scopes control relevance, not permission.
 
-Recall ranks lexical matches in the current title and statement. It returns
+Recall ranks BM25 word matches in the current title and statement, fused with
+matches by meaning when the [semantic model](setup.md#enable-semantic-search) is
+installed. It returns
 source, basis, review status, and revision alongside the statement. Old versions
 stay in the note but are excluded from recall. Human annotations under `## Notes`
 are returned separately so they can qualify a statement without being silently

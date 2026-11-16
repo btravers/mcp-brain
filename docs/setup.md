@@ -38,7 +38,7 @@ working authentication, and a configured upstream.
 
 ## Build from source
 
-Install Rust 1.93 or newer with your preferred Rust distribution, then:
+Install Rust 1.94 or newer with your preferred Rust distribution, then:
 
 ```sh
 git clone git@github.com:btravers/mcp-brain.git
@@ -243,6 +243,31 @@ Keep machine paths in user-level configuration, outside public repositories.
 When multiple clients use the same vault, they must use the same local state
 directory. The default is derived from the canonical vault path. If you set
 `--state-dir`, use that same absolute directory in every client and CLI command.
+
+## Enable semantic search
+
+Search and recall use BM25 word ranking out of the box. A local embedding model
+also finds notes by meaning, across English and French: "server hosting
+expenses" finds a French note about *coûts d'hébergement*. It also lets Inbox
+review suggest similar existing notes and memory review flag memories that say
+the same thing in different words.
+
+```sh
+mcp-brain --vault "/absolute/path/to/vault" model install
+mcp-brain --vault "/absolute/path/to/vault" index rebuild
+```
+
+`model install` downloads [multilingual-e5-small](https://huggingface.co/intfloat/multilingual-e5-small)
+(about 490 MB) with `curl` from a pinned revision, checks each file's SHA-256,
+and installs it into the state directory. Nothing is downloaded at query time.
+Offline, copy `config.json`, `tokenizer.json`, and `model.safetensors` from that
+revision into a directory and pass `--from DIR`; the same checksums apply.
+
+`index rebuild` embeds every note. On Apple Silicon, with Apple's Accelerate
+framework, it measured roughly 50 note sections per second. Linux and Windows use
+a portable CPU path, which measured about four times slower on the same Mac. Without a rebuild, each query embeds up to 64 changed sections and stays
+lexical until the backlog is done. Responses say which ranking ran. Each MCP
+server process maps the model into memory, and concurrent processes share it.
 
 ## Make memory useful across sessions
 

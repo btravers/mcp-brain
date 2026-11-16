@@ -4,7 +4,10 @@
 
 Ask your assistant to call `inbox_review`. It returns the capture count,
 previews, related folder hints, and questions about actionability. Folder hints
-use shared words; they are not semantic classification or decisions.
+use shared words; they are not semantic classification or decisions. With the
+[semantic model](setup.md#enable-semantic-search), each item also lists up to
+three `similar_notes` outside Inbox: candidates to merge with or link to. They
+are suggestions only; nothing is merged automatically.
 
 The assistant should read the complete notes, then propose one destination and
 reason per item. Classify by the note's current purpose:

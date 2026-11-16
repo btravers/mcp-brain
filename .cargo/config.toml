@@ -1,0 +1,9 @@
+# gemm-f16, which candle uses for matrix products, contains half-precision
+# ARM assembly that only assembles when the target enables FP16. ARM Linux
+# builds therefore require ARMv8.2-A or later (Graviton 2+, Ampere, Pi 5).
+# Apple Silicon targets enable FP16 by default.
+[target.aarch64-unknown-linux-gnu]
+rustflags = ["-C", "target-feature=+fp16"]
+
+[target.aarch64-unknown-linux-musl]
+rustflags = ["-C", "target-feature=+fp16"]
