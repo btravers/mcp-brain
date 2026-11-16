@@ -43,7 +43,7 @@ macOS binaries are not notarized. Intel macOS and Windows ARM64 builds are not
 currently provided. Downloads live under [Releases](https://github.com/btravers/mcp-brain/releases).
 
 <details>
-<summary>Build from source with Rust 1.94 or newer</summary>
+<summary>Build from source with Rust 1.100 or newer</summary>
 
 ```sh
 git clone git@github.com:btravers/mcp-brain.git

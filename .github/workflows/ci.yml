@@ -11,12 +11,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15, windows-2022]
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - name: Install Rust
-        run: rustup toolchain install 1.94.0 --profile minimal --component rustfmt --component clippy
-      - run: cargo +1.94.0 fmt --all --check
-      - run: cargo +1.94.0 test --locked
-      - run: cargo +1.94.0 clippy --locked --all-targets -- -D warnings
+      - uses: actions/checkout@v7
+      - uses: cachix/install-nix-action@v31
+      # The same environment as local development.
+      - run: nix develop --command cargo fmt --all --check
+      - run: nix develop --command cargo test --locked
+      - run: nix develop --command cargo clippy --locked --all-targets -- -D warnings
+  # Nix does not run on Windows; rustup installs the toolchain pinned in
+  # rust-toolchain.toml instead.
+  test-windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install
+      - run: cargo fmt --all --check
+      - run: cargo test --locked
+      - run: cargo clippy --locked --all-targets -- -D warnings

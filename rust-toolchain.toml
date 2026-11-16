@@ -1,0 +1,6 @@
+# Single source of truth for the Rust version: rustup reads this file
+# directly, and flake.nix builds the same toolchain from it.
+[toolchain]
+channel = "1.100.0"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

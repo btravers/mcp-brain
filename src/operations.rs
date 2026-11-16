@@ -197,10 +197,8 @@ impl Vault {
                 && !meta.file_type().is_symlink()
             {
                 use sha2::{Digest, Sha256};
-                let mut file = fs::File::open(path)?;
-                let mut hash = Sha256::new();
-                std::io::copy(&mut file, &mut hash)?;
-                fingerprint.push_str(&format!("{name}:{:x}", hash.finalize()));
+                let hash = Sha256::digest(fs::read(path)?);
+                fingerprint.push_str(&format!("{name}:{}", note::hex(&hash)));
             }
         }
         Ok(note::revision(&fingerprint))
