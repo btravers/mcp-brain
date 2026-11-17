@@ -19,7 +19,23 @@ Git is optional; Obsidian is optional too.
 
 ### 1. Install the executable
 
-Download the archive for your machine and
+On macOS (Apple Silicon) or Linux:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/btravers/mcp-brain/main/install.sh | sh
+```
+
+The script picks the build for your machine, checks it against the release's
+`SHA256SUMS`, and installs `mcp-brain` into `~/.local/bin`. Run the same command
+again to update, then restart your MCP clients. Options go after `sh -s --`:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/btravers/mcp-brain/main/install.sh | sh -s -- --version v0.4.0 --dir "$HOME/bin"
+```
+
+To read [the script](install.sh) first, download it and run `sh install.sh`.
+
+On Windows, or to install by hand, download the archive for your machine and
 [SHA256SUMS](https://github.com/btravers/mcp-brain/releases/latest/download/SHA256SUMS)
 from the same release. [Verify its checksum](docs/setup.md#install-a-release),
 extract it, and put `mcp-brain` on your `PATH` or use its absolute path.
