@@ -2,7 +2,25 @@
 
 ## Install a release
 
-Choose your archive from [Releases](https://github.com/btravers/mcp-brain/releases).
+On macOS (Apple Silicon) and Linux, the install script downloads the build for
+your machine, verifies it against `SHA256SUMS`, and installs it:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/btravers/mcp-brain/main/install.sh | sh
+```
+
+| Option | Effect |
+| --- | --- |
+| `--version vX.Y.Z` | Install that release instead of the latest |
+| `--dir DIR` | Install into `DIR` instead of `~/.local/bin` (or `$MCP_BRAIN_INSTALL_DIR`) |
+
+Pass options after `sh -s --`. Re-running the script updates in place: the new
+executable replaces the old one atomically, and running MCP servers keep the old
+version until their client restarts. On Linux ARM64 the script stops if the CPU
+lacks FP16, which that build requires.
+
+To install by hand, or on Windows, choose your archive from
+[Releases](https://github.com/btravers/mcp-brain/releases).
 Download `SHA256SUMS` alongside it. Compare the archive's SHA-256 hash with the
 matching line in that file:
 

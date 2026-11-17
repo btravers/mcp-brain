@@ -65,7 +65,9 @@ Keep the documented limitations accurate when extending supported workflows.
 
 CI runs formatting, tests, and Clippy on macOS ARM64, Linux x86-64, Linux ARM64,
 and Windows x86-64: inside `nix develop` on Linux and macOS, and with rustup on
-Windows, where Nix does not run. Release builds additionally test the target binaries and
+Windows, where Nix does not run. It also runs `install.sh` against the latest
+published release on Linux x86-64, Linux ARM64, and macOS, and checks it with
+shellcheck. Release builds additionally test the target binaries and
 package Linux with musl and Windows with a statically linked compiler runtime.
 See GitHub's [runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
 for the platform labels used in the workflows.
