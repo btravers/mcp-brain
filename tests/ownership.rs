@@ -151,6 +151,15 @@ fn adding_up_preserves_original_yaml_and_human_body() {
 }
 
 #[test]
+fn revisions_are_lowercase_hex_sha256() {
+    // Stored in frontmatter and plans; the format must never drift.
+    assert_eq!(
+        revision(""),
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    );
+}
+
+#[test]
 fn stale_revision_and_section_injection_are_rejected() {
     let text = "Human text";
     let note = Note::parse(text).unwrap();

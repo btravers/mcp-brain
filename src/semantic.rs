@@ -258,10 +258,18 @@ fn decode(bytes: &[u8]) -> Option<BTreeMap<String, Vectors>> {
     floats.next().is_none().then_some(notes)
 }
 
+/// Streams the file: the model is too large to hash in one read.
 fn sha256_file(path: &Path) -> Result<String> {
+    let mut file = fs::File::open(path)?;
     let mut hasher = Sha256::new();
-    io::copy(&mut fs::File::open(path)?, &mut hasher)?;
-    Ok(format!("{:x}", hasher.finalize()))
+    let mut buffer = vec![0; 1 << 20];
+    loop {
+        match io::Read::read(&mut file, &mut buffer)? {
+            0 => break,
+            n => hasher.update(&buffer[..n]),
+        }
+    }
+    Ok(note::hex(&hasher.finalize()))
 }
 
 pub(crate) struct Semantic {

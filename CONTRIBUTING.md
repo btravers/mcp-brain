@@ -1,14 +1,18 @@
 # Contributing
 
-Use Rust 1.94 or newer. Clone with SSH:
+`rust-toolchain.toml` pins the Rust version. The Nix flake provides that
+exact toolchain, and CI uses the same shell on Linux and macOS:
 
 ```sh
 git clone git@github.com:btravers/mcp-brain.git
 cd mcp-brain
+nix develop
 cargo fmt --all --check
 cargo test --locked
 cargo clippy --locked --all-targets -- -D warnings
 ```
+
+Without Nix, rustup reads `rust-toolchain.toml` and installs the same version.
 
 ## Changes worth testing
 
@@ -60,7 +64,8 @@ Keep the documented limitations accurate when extending supported workflows.
 ## CI and releases
 
 CI runs formatting, tests, and Clippy on macOS ARM64, Linux x86-64, Linux ARM64,
-and Windows x86-64. Release builds additionally test the target binaries and
+and Windows x86-64: inside `nix develop` on Linux and macOS, and with rustup on
+Windows, where Nix does not run. Release builds additionally test the target binaries and
 package Linux with musl and Windows with a statically linked compiler runtime.
 See GitHub's [runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
 for the platform labels used in the workflows.
@@ -76,3 +81,7 @@ To prepare a release:
 The release workflow does not publish drafts automatically. A manual workflow
 run builds downloadable Actions artifacts without creating a release. There is
 no crates.io publication step, signing, or macOS notarization in this version.
+
+Dependabot opens weekly PRs for Cargo dependencies, the Rust toolchain, flake
+inputs, and GitHub Actions. When it bumps `rust-toolchain.toml`, also raise
+`rust-version` in `Cargo.toml` if the code starts relying on the new release.

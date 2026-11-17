@@ -30,8 +30,13 @@ pub struct Heading {
     pub title: String,
 }
 
+/// Lowercase hex, as `sha2` digests no longer format themselves.
+pub fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
 pub fn revision(text: &str) -> String {
-    format!("{:x}", Sha256::digest(text.as_bytes()))
+    hex(&Sha256::digest(text.as_bytes()))
 }
 
 /// Only real, top-level Markdown headings count. Examples inside code fences,

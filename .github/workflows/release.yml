@@ -29,16 +29,20 @@ jobs:
       CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
       CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS: "-C target-feature=+crt-static"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      # The toolchain comes from rust-toolchain.toml; musl and MSVC targets
+      # are cross builds that Nix does not cover on every runner.
       - name: Install Rust
-        run: rustup toolchain install 1.94.0 --profile minimal --target ${{ matrix.target }}
+        run: |
+          rustup toolchain install
+          rustup target add ${{ matrix.target }}
       - name: Install musl
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y musl-tools
       - name: Test target
-        run: cargo +1.94.0 test --locked --target ${{ matrix.target }}
+        run: cargo test --locked --target ${{ matrix.target }}
       - name: Build release
-        run: cargo +1.94.0 build --locked --release --target ${{ matrix.target }}
+        run: cargo build --locked --release --target ${{ matrix.target }}
       - name: Package Unix
         if: runner.os != 'Windows'
         shell: bash
@@ -59,7 +63,7 @@ jobs:
           Copy-Item "target/$env:TARGET/release/mcp-brain.exe",README.md,CONTRIBUTING.md,SECURITY.md,LICENSE -Destination package
           Copy-Item docs -Destination package/docs -Recurse
           Compress-Archive -Path package/* -DestinationPath "dist/mcp-brain-$env:TARGET.zip"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: mcp-brain-${{ matrix.target }}
           path: dist/*
@@ -71,7 +75,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
