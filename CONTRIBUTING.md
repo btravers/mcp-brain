@@ -74,12 +74,16 @@ for the platform labels used in the workflows.
 
 To prepare a release:
 
-1. Update the package version and lockfile; run the checks above.
+1. In a PR, update the package version and lockfile; run the checks above.
 2. Review tracked files for private information and update the documentation.
-3. Push a matching `vX.Y.Z` tag.
-4. Wait for the Release workflow to build all four archives and `SHA256SUMS`.
-5. Inspect the generated **draft** GitHub release, then publish it manually.
+3. Merge the PR. The Release workflow sees an untagged version in `Cargo.toml`,
+   builds all four archives and `SHA256SUMS`, creates the `vX.Y.Z` tag on the
+   merge commit, and opens a **draft** release.
+4. Inspect the draft GitHub release, then publish it manually.
 
+Pushes to `main` whose version is already tagged build nothing. If a release
+build fails, no tag is created; re-run the workflow after fixing the cause. If
+the tag exists but the draft is missing, delete the tag and re-run.
 The release workflow does not publish drafts automatically. A manual workflow
 run builds downloadable Actions artifacts without creating a release. There is
 no crates.io publication step, signing, or macOS notarization in this version.
