@@ -1,12 +1,41 @@
 name: Release
+# Merging a version bump releases it: each push to main checks whether the
+# Cargo.toml version already has a tag, and only an untagged version builds.
 on:
   push:
-    tags: ['v*']
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
+# Queue overlapping runs so a second merge sees the tag the first one created.
+concurrency:
+  group: release
+  cancel-in-progress: false
 jobs:
+  version:
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.check.outputs.tag }}
+      new: ${{ steps.check.outputs.new }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: check
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)"
+          [ -n "$version" ] || { echo "no version in Cargo.toml" >&2; exit 1; }
+          tag="v$version"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" > /dev/null; then
+            echo "new=false" >> "$GITHUB_OUTPUT"
+            echo "$tag already exists; nothing to release."
+          else
+            echo "new=true" >> "$GITHUB_OUTPUT"
+            echo "$tag is new; building a draft release."
+          fi
   build:
+    needs: version
+    # A manual run always builds, as downloadable artifacts only.
+    if: needs.version.outputs.new == 'true' || github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
@@ -69,8 +98,8 @@ jobs:
           path: dist/*
           if-no-files-found: error
   draft-release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    if: github.event_name == 'push' && needs.version.outputs.new == 'true'
+    needs: [version, build]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -82,9 +111,13 @@ jobs:
       - name: Checksums
         working-directory: dist
         run: sha256sum mcp-brain-* > SHA256SUMS
-      - name: Create draft release
+      # A draft does not create its tag until published, so create it here:
+      # the next push to main then sees the version as released.
+      - name: Tag and create draft release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: gh release create "$RELEASE_TAG" dist/* --draft --verify-tag --title "$RELEASE_TAG" --generate-notes
+          RELEASE_TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          gh api "repos/$GH_REPO/git/refs" -f ref="refs/tags/$RELEASE_TAG" -f sha="$GITHUB_SHA"
+          gh release create "$RELEASE_TAG" dist/* --draft --verify-tag --title "$RELEASE_TAG" --generate-notes
