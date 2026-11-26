@@ -69,6 +69,18 @@ cargo install --path . --locked
 
 </details>
 
+<details>
+<summary>Install with Nix</summary>
+
+```sh
+nix profile install github:btravers/mcp-brain
+```
+
+In a flake, add the input `mcp-brain.url = "github:btravers/mcp-brain";` and
+use `inputs.mcp-brain.packages.${system}.default`.
+
+</details>
+
 ### 2. Choose your vault
 
 Use an existing vault, or create a new one with the PARA directories:
