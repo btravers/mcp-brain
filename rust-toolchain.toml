@@ -2,5 +2,6 @@
 # directly, and flake.nix builds the same toolchain from it.
 [toolchain]
 channel = "1.100.0"
-components = ["rustfmt", "clippy"]
+# rust-analyzer and rust-src give editors the same compiler version.
+components = ["rustfmt", "clippy", "rust-analyzer", "rust-src"]
 profile = "minimal"

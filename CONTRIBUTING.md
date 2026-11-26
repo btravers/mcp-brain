@@ -12,6 +12,9 @@ cargo test --locked
 cargo clippy --locked --all-targets -- -D warnings
 ```
 
+The shell also provides `rust-analyzer` and `rust-src` for editors and
+`shellcheck` for `install.sh`. With direnv, `direnv allow` loads it on `cd`.
+
 Without Nix, rustup reads `rust-toolchain.toml` and installs the same version.
 
 ## Changes worth testing

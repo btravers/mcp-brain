@@ -55,8 +55,13 @@
 
       devShells = forEachSystem (pkgs: {
         default = pkgs.mkShell {
-          # The toolchain pinned in rust-toolchain.toml, so Nix and rustup agree.
-          packages = [ (pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml) ];
+          packages = [
+            # The toolchain pinned in rust-toolchain.toml, so Nix and rustup agree.
+            (pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml)
+            # CI lints install.sh with it.
+            pkgs.shellcheck
+          ];
+          RUST_BACKTRACE = "1";
         };
       });
     };
