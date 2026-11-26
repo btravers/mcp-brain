@@ -20,6 +20,9 @@ jobs:
       - run: nix develop --command cargo fmt --all --check
       - run: nix develop --command cargo test --locked
       - run: nix develop --command cargo clippy --locked --all-targets -- -D warnings
+      # The package other flakes consume (e.g. a nix-darwin config).
+      - run: nix build --print-build-logs
+      - run: ./result/bin/mcp-brain --version
   # Nix does not run on Windows; rustup installs the toolchain pinned in
   # rust-toolchain.toml instead.
   test-windows:

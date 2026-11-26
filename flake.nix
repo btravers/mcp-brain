@@ -30,10 +30,38 @@
         );
     in
     {
+      # `nix build` / flake input: the same pinned toolchain as the dev shell.
+      packages = forEachSystem (
+        pkgs:
+        let
+          toolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
+          rustPlatform = pkgs.makeRustPlatform {
+            cargo = toolchain;
+            rustc = toolchain;
+          };
+        in
+        {
+          default = rustPlatform.buildRustPackage {
+            pname = "mcp-brain";
+            version = (pkgs.lib.importTOML ./Cargo.toml).package.version;
+            src = pkgs.lib.cleanSource ./.;
+            cargoLock.lockFile = ./Cargo.lock;
+            # CI runs the test suite in the dev shell.
+            doCheck = false;
+            meta.mainProgram = "mcp-brain";
+          };
+        }
+      );
+
       devShells = forEachSystem (pkgs: {
         default = pkgs.mkShell {
-          # The toolchain pinned in rust-toolchain.toml, so Nix and rustup agree.
-          packages = [ (pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml) ];
+          packages = [
+            # The toolchain pinned in rust-toolchain.toml, so Nix and rustup agree.
+            (pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml)
+            # CI lints install.sh with it.
+            pkgs.shellcheck
+          ];
+          RUST_BACKTRACE = "1";
         };
       });
     };
